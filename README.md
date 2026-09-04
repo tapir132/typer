@@ -28,6 +28,16 @@ The build script uses the local `Cadence Signing` identity when available so Acc
 
 Use **Train** in three ways: **Copy** learns exact errors and digraphs, **Freewrite** learns organic thought pauses, and **Sprint** learns fast bursts and recovery reflexes. The profiler measures dwell time, flight time, press-to-press digraph latency, timing variation, burst length, correction rate, detection delay, repair latency, and recurring substitutions. Profiles and samples stay in macOS user defaults on this Mac.
 
+### Mistakes and corrections during training
+
+Correct mistakes in all three modes exactly as you naturally would. Do not deliberately manufacture typos, rush a correction, or leave an error behind just to give the model more data.
+
+- **Copy:** Type the passage accurately and fix genuine mistakes using your normal correction behavior.
+- **Freewrite:** Compose fresh text in the box. Pause, revise, delete words, and correct mistakes naturally.
+- **Sprint:** Type quickly, but still correct a mistake when that is your normal reflex.
+
+Corrections are useful training data: Typer records which mistakes occur, how many characters you type before noticing them, and whether you backspace or revise an earlier word. If you genuinely would not notice a particular mistake, leaving it is also representative—just do not make that choice artificially for the test.
+
 ## How the model works
 
 The personal mode samples from the distributions it recorded instead of applying one random delay to every key. Specific letter pairs can be fast or awkward, dwell and flight remain separate, neighboring timings drift together in short motor patterns, sentences create larger pauses, and longer runs slowly change cadence. Error generation reuses the typist's observed substitutions and detection delay when enough samples exist.
