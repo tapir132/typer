@@ -58,8 +58,8 @@ struct TrainingView: View {
                 }
                 .buttonStyle(QuietButtonStyle())
                 HStack(alignment: .firstTextBaseline, spacing: 9) {
-                    Text("\(min(profiles.samples.count, 3)) / 3").font(.system(size: 19, weight: .semibold, design: .monospaced)).foregroundStyle(TyperTheme.signal)
-                    Text("samples\nrecorded").font(.system(size: 9)).foregroundStyle(TyperTheme.muted)
+                    Text("\(profiles.samples.count)").font(.system(size: 19, weight: .semibold, design: .monospaced)).foregroundStyle(TyperTheme.signal)
+                    Text("samples saved\nlatest \(min(profiles.samples.count, 5)) used").font(.system(size: 9)).foregroundStyle(TyperTheme.muted)
                 }
             }
             .padding(.bottom, 24)

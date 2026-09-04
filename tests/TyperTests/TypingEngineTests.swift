@@ -84,6 +84,25 @@ struct TypingEngineTests {
         #expect(UpdateChannel.edge.title == "Edge")
     }
 
+    @Test func noUpdateResultIsNotPresentedAsFailure() {
+        let current = NSError(
+            domain: "SUSparkleErrorDomain",
+            code: 1001,
+            userInfo: [NSLocalizedDescriptionKey: "You're up to date!"]
+        )
+        #expect(UpdateErrorPresentation.message(for: current) == nil)
+
+        let brokenFeed = NSError(
+            domain: "SUSparkleErrorDomain",
+            code: 1002,
+            userInfo: [
+                NSLocalizedDescriptionKey: "The update feed could not be read.",
+                NSLocalizedRecoverySuggestionErrorKey: "Try again later."
+            ]
+        )
+        #expect(UpdateErrorPresentation.message(for: brokenFeed) == "The update feed could not be read. Try again later.")
+    }
+
     @MainActor
     @Test func trainingEditorIsFocusableAndHasRealLayout() {
         let editor = TrainingEditorFactory.make(

@@ -190,7 +190,7 @@ struct RootView: View {
             .pickerStyle(.segmented).labelsHidden()
 
             if let updateError = updates.lastError {
-                Text("Last update error: \(updateError)")
+                Text("Update failed: \(updateError)")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(TyperTheme.danger)
                     .textSelection(.enabled)

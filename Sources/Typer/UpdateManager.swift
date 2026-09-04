@@ -21,6 +21,20 @@ struct StartupUpdatePromptGate {
     }
 }
 
+enum UpdateErrorPresentation {
+    static let noUpdateErrorCode = 1001 // Sparkle's SUNoUpdateError
+
+    static func message(for error: NSError?) -> String? {
+        guard let error else { return nil }
+        guard !(error.domain == SUSparkleErrorDomain && error.code == noUpdateErrorCode) else { return nil }
+        let recovery = error.localizedRecoverySuggestion?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [error.localizedDescription, recovery]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+}
+
 /// Sparkle owns feed verification, update scheduling, atomic replacement, and
 /// relaunching. Typer only exposes the user's update preferences and channel.
 @MainActor
@@ -108,9 +122,17 @@ final class UpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
         if let error {
-            let detail = (error as NSError).debugDescription
-            lastError = detail
-            NSLog("Typer Sparkle update failed: %@", detail)
+            let updateError = error as NSError
+            if let detail = UpdateErrorPresentation.message(for: updateError) {
+                lastError = detail
+                NSLog("Typer Sparkle update failed: %@", updateError.debugDescription)
+            } else {
+                // Sparkle reports "already current" through its error callback.
+                // It is a successful check result, not something to show in red.
+                lastError = nil
+            }
+        } else {
+            lastError = nil
         }
         guard startupProbeInProgress, updateCheck == .updateInformation else { return }
         let shouldPrompt = startupProbeFoundUpdate
