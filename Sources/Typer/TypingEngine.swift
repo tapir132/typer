@@ -204,7 +204,12 @@ enum TypingEngine {
             if previousCharacter.rangeOfCharacter(from: CharacterSet(charactersIn: ",;:")) != nil { interval += (300 + unit() * 200) * realism }
             if previousCharacter.rangeOfCharacter(from: CharacterSet(charactersIn: ".!?\n")) != nil && settings.thoughtPauses {
                 interval += (600 + unit() * 600) * realism
-                if unit() < 0.025 { interval += 2_000 + unit() * 3_000 }
+                if unit() < 0.025 {
+                    let pauseRoll = unit()
+                    interval += settings.extendedThoughtPauses
+                        ? 2_000 + pow(pauseRoll, 1.8) * 43_000
+                        : 2_000 + pauseRoll * 3_000
+                }
             }
             if settings.fatigueDrift && sourceCharacterCount > 250 {
                 interval *= 1 + (Double(typedCharacters) / Double(sourceCharacterCount)) * 0.09
@@ -213,7 +218,7 @@ enum TypingEngine {
             let microPauseRoll = unit()
             let microPauseLength = unit()
             if microPauseRoll < 0.012 * realism { interval += 180 + microPauseLength * 520 }
-            return bounded(interval, 28, 8_000)
+            return bounded(interval, 28, settings.extendedThoughtPauses ? 45_000 : 8_000)
         }
 
         func appendCharacter(_ character: String, speedMultiplier: Double = 1) {
@@ -224,7 +229,7 @@ enum TypingEngine {
             if character.first?.isUppercase == true { dwellCenter *= 1.04 }
             let dwellSpread = profile.dwellMAD * (0.3 + realism * 0.9)
             let dwell = bounded(dwellCenter + gaussian() * dwellSpread, 32, 190)
-            let flight = bounded(interval - priorDwell, 8, 8_000)
+            let flight = bounded(interval - priorDwell, 8, settings.extendedThoughtPauses ? 45_000 : 8_000)
             let kind: PlannedEventKind = character == "\n" ? .enter : character == "\t" ? .tab : .character
             events.append(PlannedEvent(kind: kind, value: character, flight: flight, dwell: dwell))
             previousCharacter = character

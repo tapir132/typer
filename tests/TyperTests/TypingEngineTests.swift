@@ -154,6 +154,19 @@ struct TypingEngineTests {
         #expect(foundSelection)
     }
 
+    @Test func extendedThoughtPausesCanExceedNormalCap() {
+        var settings = TypingSettings()
+        settings.thoughtPauses = true
+        settings.extendedThoughtPauses = true
+        settings.mistakeLevel = 0
+        let text = String(repeating: "A sentence ends here. Another begins now. ", count: 180)
+        var random = TestGenerator(seed: 414)
+        let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: .baseline(), using: &random)
+        #expect(plan.events.contains { $0.flight > 8_000 })
+        #expect(plan.events.allSatisfy { $0.flight <= 45_000 })
+        #expect(apply(plan.events) == text)
+    }
+
     private func apply(_ events: [PlannedEvent]) -> String {
         var buffer: [Character] = []
         var cursor = 0

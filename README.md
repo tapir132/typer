@@ -40,6 +40,7 @@ The approach is informed by the [CMU keystroke-dynamics benchmark](https://www.c
 - Some protected fields, remote desktops, games, or apps that intercept keyboard events may not accept simulated keystrokes.
 - The simulator always repairs generated mistakes so the final text matches the source.
 - Human variation changes dwell, flight, bursts, and pauses only. Mistake frequency independently controls how many errors are injected and repaired.
+- Extended thought pauses optionally allow rare sentence-level stalls up to 45 seconds; the emergency stop remains responsive during them.
 - Sparkle checks the stable GitHub release feed by default. The optional Edge channel follows successful builds from `main`; both feeds require a valid Ed25519 signature.
 
 ## Test

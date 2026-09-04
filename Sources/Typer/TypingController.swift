@@ -98,7 +98,13 @@ final class TypingController: ObservableObject {
             let source = CGEventSource(stateID: .hidSystemState)
             for event in plan.events {
                 guard self.workItem?.isCancelled == false else { return }
-                Self.sleep(milliseconds: event.flight)
+                var remainingFlight = event.flight
+                while remainingFlight > 0 {
+                    guard self.workItem?.isCancelled == false else { return }
+                    let slice = min(50, remainingFlight)
+                    Self.sleep(milliseconds: slice)
+                    remainingFlight -= slice
+                }
                 guard self.workItem?.isCancelled == false else { return }
                 Self.post(event, source: source)
             }

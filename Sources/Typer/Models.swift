@@ -43,6 +43,7 @@ struct TypingSettings: Codable, Equatable {
     var mistakeLevel: Int = 2
     var delayedRepairs = true
     var thoughtPauses = true
+    var extendedThoughtPauses = false
     var fatigueDrift = true
 }
 
