@@ -147,7 +147,7 @@ struct TrainingView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Label("Do one of each for the best starting profile.", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(TyperTheme.signal)
-                Text("You do not need to repeat the same passage. Do not deliberately add or hide mistakes. If you usually fix an error, fix it; if you would naturally leave it, leave it. Extra samples keep refining the profile, using your five most recent samples.")
+                Text("You do not need to repeat the same passage. Do not deliberately add or hide mistakes. If you usually fix an error, fix it; if you would naturally leave it, leave it. Extra samples keep refining the profile, using your five most recent samples. Learned traits are blended with a research baseline so a strange sample cannot ruin the cadence.")
                     .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong).lineSpacing(4)
             }
             .font(.system(size: 11, weight: .semibold))

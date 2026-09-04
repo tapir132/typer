@@ -112,7 +112,9 @@ final class AppModel: ObservableObject {
     }
 
     var playbackProfile: TypingProfile {
-        settings.mode == .personal ? profiles.activeProfile : .baseline(wpm: settings.wpm)
+        settings.mode == .personal
+            ? profiles.activeProfile.stabilized(wpm: settings.wpm)
+            : .baseline(wpm: settings.wpm)
     }
 
     var playbackSettings: TypingSettings {
@@ -132,7 +134,7 @@ final class AppModel: ObservableObject {
     var performanceSourceDetail: String {
         if isUsingLearnedProfile {
             let count = profiles.activeProfile.sampleCount
-            return "My rhythm · \(count) learned sample\(count == 1 ? "" : "s")"
+            return "My rhythm · \(count) sample\(count == 1 ? "" : "s") · research-stabilized"
         }
         switch settings.mode {
         case .personal: return "No saved samples yet—using the built-in model"

@@ -112,6 +112,30 @@ struct TypingEngineTests {
         #expect(elapsed < .seconds(5))
     }
 
+    @Test func learnedProfilesStayAnchoredToResearchBaseline() {
+        let baseline = TypingProfile.baseline(wpm: 64)
+        var noisy = baseline
+        noisy.id = UUID()
+        noisy.name = "Noisy sample"
+        noisy.sampleCount = 1
+        noisy.dwellMedian = 900
+        noisy.medianInterval = 4_000
+        noisy.backspaceRate = 0.8
+        noisy.digraphs = ["th": [2_000]]
+
+        let oneSample = noisy.stabilized(wpm: 64)
+        #expect(oneSample.dwellMedian < 100)
+        #expect(oneSample.medianInterval < 300)
+        #expect(oneSample.backspaceRate < 0.04)
+        #expect((oneSample.digraphs["th"]?.first ?? 0) < 300)
+
+        noisy.sampleCount = 5
+        noisy.dwellMedian = 130
+        let fiveSamples = noisy.stabilized(wpm: 64)
+        #expect(fiveSamples.dwellMedian > oneSample.dwellMedian)
+        #expect(fiveSamples.dwellMedian < 130)
+    }
+
     private func apply(_ events: [PlannedEvent]) -> String {
         var buffer: [Character] = []
         var cursor = 0

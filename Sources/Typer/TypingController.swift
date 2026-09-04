@@ -124,6 +124,24 @@ final class TypingController: ObservableObject {
         }
 
         if let key {
+            let shiftUp: CGEvent?
+            if key.shift {
+                let shiftDown = CGEvent(keyboardEventSource: source, virtualKey: 56, keyDown: true)
+                shiftDown?.flags = .maskShift
+                shiftDown?.post(tap: .cghidEventTap)
+                sleep(milliseconds: 18)
+                shiftUp = CGEvent(keyboardEventSource: source, virtualKey: 56, keyDown: false)
+            } else {
+                shiftUp = nil
+            }
+            defer {
+                if let shiftUp {
+                    sleep(milliseconds: 12)
+                    shiftUp.flags = []
+                    shiftUp.post(tap: .cghidEventTap)
+                }
+            }
+
             let down = CGEvent(keyboardEventSource: source, virtualKey: key.code, keyDown: true)
             let up = CGEvent(keyboardEventSource: source, virtualKey: key.code, keyDown: false)
             if key.shift {

@@ -1,5 +1,45 @@
 import Foundation
 
+extension TypingProfile {
+    /// Keeps short or noisy training sessions from overpowering the baseline.
+    /// Confidence rises with sample count but deliberately tops out below 1.
+    func stabilized(wpm targetWPM: Double) -> TypingProfile {
+        let baseline = TypingProfile.baseline(wpm: targetWPM)
+        guard sampleCount > 0 else { return baseline }
+        let confidence = min(0.9, 0.25 + Double(sampleCount - 1) * 0.16)
+        func blend(_ learned: Double, _ reference: Double, range: ClosedRange<Double>) -> Double {
+            let safe = min(range.upperBound, max(range.lowerBound, learned))
+            return reference + (safe - reference) * confidence
+        }
+
+        var stableDigraphs = baseline.digraphs
+        for (pair, values) in digraphs where !values.isEmpty {
+            let reference = baseline.digraphs[pair].map(TypingEngine.median) ?? baseline.medianInterval
+            stableDigraphs[pair] = values.map { reference + (min(800, max(35, $0)) - reference) * confidence }
+        }
+
+        return TypingProfile(
+            id: id,
+            name: name,
+            sampleCount: sampleCount,
+            wpm: blend(wpm, baseline.wpm, range: 20...180),
+            medianInterval: blend(medianInterval, baseline.medianInterval, range: 55...600),
+            intervalMAD: blend(intervalMAD, baseline.intervalMAD, range: 8...220),
+            dwellMedian: blend(dwellMedian, baseline.dwellMedian, range: 35...150),
+            dwellMAD: blend(dwellMAD, baseline.dwellMAD, range: 4...65),
+            backspaceRate: blend(backspaceRate, baseline.backspaceRate, range: 0.002...0.08),
+            repairDelay: blend(repairDelay, baseline.repairDelay, range: 120...1_800),
+            detectionCharacters: blend(detectionCharacters, baseline.detectionCharacters, range: 0...6),
+            burstLength: blend(burstLength, baseline.burstLength, range: 3...18),
+            punctuationPause: blend(punctuationPause, baseline.punctuationPause, range: 300...1_600),
+            wordPause: blend(wordPause, baseline.wordPause, range: 20...250),
+            digraphs: stableDigraphs,
+            confusions: confusions,
+            createdAt: createdAt
+        )
+    }
+}
+
 enum TypingEngine {
     private static let neighbors: [Character: [Character]] = [
         "q": Array("wa"), "w": Array("qase"), "e": Array("wsdr"), "r": Array("edft"), "t": Array("rfgy"),
@@ -178,7 +218,12 @@ enum TypingEngine {
 
         func appendCharacter(_ character: String, speedMultiplier: Double = 1) {
             let interval = cadence(for: character) * speedMultiplier
-            let dwell = bounded(profile.dwellMedian + gaussian() * profile.dwellMAD, 32, 190)
+            var dwellCenter = profile.dwellMedian
+            if character.rangeOfCharacter(from: .whitespacesAndNewlines) != nil { dwellCenter *= 0.88 }
+            if character.rangeOfCharacter(from: CharacterSet(charactersIn: ".,!?;:")) != nil { dwellCenter *= 1.07 }
+            if character.first?.isUppercase == true { dwellCenter *= 1.04 }
+            let dwellSpread = profile.dwellMAD * (0.3 + realism * 0.9)
+            let dwell = bounded(dwellCenter + gaussian() * dwellSpread, 32, 190)
             let flight = bounded(interval - priorDwell, 8, 8_000)
             let kind: PlannedEventKind = character == "\n" ? .enter : character == "\t" ? .tab : .character
             events.append(PlannedEvent(kind: kind, value: character, flight: flight, dwell: dwell))
