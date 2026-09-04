@@ -1,0 +1,8 @@
+.build/
+node_modules/
+DerivedData/
+.DS_Store
+.playwright-cli/
+output/
+*.xcuserstate
+xcuserdata/
