@@ -261,16 +261,27 @@ enum TypingEngine {
                 let wrong = token.first?.isUppercase == true ? confused.prefix(1).uppercased() + confused.dropFirst() : confused
                 wrong.forEach { appendCharacter(String($0)) }
                 let canDelay = settings.delayedRepairs && tokenIndex + 2 < tokens.count && tokens[tokenIndex + 1].allSatisfy(\.isWhitespace) && unit() < 0.46
+                let selectsWholeWord = unit() < 0.36
                 if canDelay {
                     let carried = tokens[tokenIndex + 1] + tokens[tokenIndex + 2]
                     carried.forEach { appendCharacter(String($0)) }
                     for move in 0..<carried.count { appendKey(.arrowLeft, delay: move == 0 ? profile.repairDelay * (1.1 + unit()) : 30 + unit() * 24) }
-                    for index in 0..<wrong.count { appendKey(.backspace, delay: index == 0 ? profile.repairDelay * (0.55 + unit()) : 36 + unit() * 34) }
+                    for index in 0..<wrong.count {
+                        appendKey(
+                            selectsWholeWord ? .shiftArrowLeft : .backspace,
+                            delay: index == 0 ? profile.repairDelay * (0.55 + unit()) : 36 + unit() * 34
+                        )
+                    }
                     token.forEach { appendCharacter(String($0), speedMultiplier: 0.82) }
                     for _ in 0..<carried.count { appendKey(.arrowRight, delay: 28 + unit() * 20) }
                     tokenIndex += 3
                 } else {
-                    for index in 0..<wrong.count { appendKey(.backspace, delay: index == 0 ? profile.repairDelay * (0.55 + unit()) : 36 + unit() * 34) }
+                    for index in 0..<wrong.count {
+                        appendKey(
+                            selectsWholeWord ? .shiftArrowLeft : .backspace,
+                            delay: index == 0 ? profile.repairDelay * (0.55 + unit()) : 36 + unit() * 34
+                        )
+                    }
                     token.forEach { appendCharacter(String($0), speedMultiplier: 0.82) }
                     tokenIndex += 1
                 }

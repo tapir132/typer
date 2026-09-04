@@ -136,18 +136,55 @@ struct TypingEngineTests {
         #expect(fiveSamples.dwellMedian < 130)
     }
 
+    @Test func correctionStylesIncludeWholeWordSelection() {
+        var settings = TypingSettings()
+        settings.mistakeLevel = 5
+        settings.delayedRepairs = true
+        let text = String(repeating: "their because definitely receive separate about ", count: 8)
+        var foundSelection = false
+        for seed in 1...120 {
+            var random = TestGenerator(seed: UInt64(seed))
+            let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: .baseline(), using: &random)
+            if plan.events.contains(where: { $0.kind == .shiftArrowLeft }) {
+                foundSelection = true
+                #expect(apply(plan.events) == text)
+                break
+            }
+        }
+        #expect(foundSelection)
+    }
+
     private func apply(_ events: [PlannedEvent]) -> String {
         var buffer: [Character] = []
         var cursor = 0
+        var selectionAnchor: Int?
+        func replaceSelectionIfNeeded() {
+            guard let anchor = selectionAnchor else { return }
+            let bounds = min(anchor, cursor)..<max(anchor, cursor)
+            buffer.removeSubrange(bounds)
+            cursor = bounds.lowerBound
+            selectionAnchor = nil
+        }
         for event in events {
             switch event.kind {
             case .character:
+                replaceSelectionIfNeeded()
                 for character in event.value { buffer.insert(character, at: cursor); cursor += 1 }
-            case .enter: buffer.insert("\n", at: cursor); cursor += 1
-            case .tab: buffer.insert("\t", at: cursor); cursor += 1
-            case .backspace where cursor > 0: buffer.remove(at: cursor - 1); cursor -= 1
-            case .arrowLeft: cursor = max(0, cursor - 1)
-            case .arrowRight: cursor = min(buffer.count, cursor + 1)
+            case .enter:
+                replaceSelectionIfNeeded(); buffer.insert("\n", at: cursor); cursor += 1
+            case .tab:
+                replaceSelectionIfNeeded(); buffer.insert("\t", at: cursor); cursor += 1
+            case .backspace where selectionAnchor != nil:
+                replaceSelectionIfNeeded()
+            case .backspace where cursor > 0:
+                buffer.remove(at: cursor - 1); cursor -= 1
+            case .arrowLeft:
+                selectionAnchor = nil; cursor = max(0, cursor - 1)
+            case .arrowRight:
+                selectionAnchor = nil; cursor = min(buffer.count, cursor + 1)
+            case .shiftArrowLeft:
+                if selectionAnchor == nil { selectionAnchor = cursor }
+                cursor = max(0, cursor - 1)
             default: break
             }
         }

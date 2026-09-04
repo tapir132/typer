@@ -118,6 +118,7 @@ final class TypingController: ObservableObject {
         case .backspace: key = (51, false)
         case .arrowLeft: key = (123, false)
         case .arrowRight: key = (124, false)
+        case .shiftArrowLeft: key = (123, true)
         case .enter: key = (36, false)
         case .tab: key = (48, false)
         case .character: key = KeyboardMap.lookup(event.value)

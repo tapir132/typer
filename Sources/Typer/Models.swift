@@ -99,6 +99,7 @@ enum PlannedEventKind: String, Codable {
     case backspace
     case arrowLeft
     case arrowRight
+    case shiftArrowLeft
     case enter
     case tab
 }
