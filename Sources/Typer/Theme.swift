@@ -17,6 +17,14 @@ enum TyperTheme {
     static let softLine = Color.white.opacity(0.075)
 }
 
+enum TyperLayout {
+    static let workspaceHorizontalPadding: CGFloat = 48
+    static let workspaceTopPadding: CGFloat = 24
+    static let workspaceBottomPadding: CGFloat = 24
+    static let topBarHeight: CGFloat = 58
+    static let navigationTabWidth: CGFloat = 80
+}
+
 struct SurfaceModifier: ViewModifier {
     var radius: CGFloat = 12
     func body(content: Content) -> some View {

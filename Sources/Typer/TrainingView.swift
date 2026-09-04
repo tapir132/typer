@@ -76,9 +76,9 @@ struct TrainingView: View {
             .overlay(alignment: .top) { Rectangle().fill(TyperTheme.line).frame(height: 1) }
             .overlay(alignment: .bottom) { Rectangle().fill(TyperTheme.line).frame(height: 1) }
         }
-        .padding(.horizontal, 48)
-        .padding(.top, 34)
-        .padding(.bottom, 34)
+        .padding(.horizontal, TyperLayout.workspaceHorizontalPadding)
+        .padding(.top, TyperLayout.workspaceTopPadding)
+        .padding(.bottom, TyperLayout.workspaceBottomPadding)
         .onChange(of: mode) { _, _ in reset(changePassage: false) }
         .sheet(isPresented: $showsTrainingGuide) { trainingGuide }
     }

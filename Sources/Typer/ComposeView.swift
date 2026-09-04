@@ -27,9 +27,9 @@ struct ComposeView: View {
             .overlay(alignment: .top) { Rectangle().fill(TyperTheme.line).frame(height: 1) }
             .overlay(alignment: .bottom) { Rectangle().fill(TyperTheme.line).frame(height: 1) }
         }
-        .padding(.horizontal, 48)
-        .padding(.top, 24)
-        .padding(.bottom, 24)
+        .padding(.horizontal, TyperLayout.workspaceHorizontalPadding)
+        .padding(.top, TyperLayout.workspaceTopPadding)
+        .padding(.bottom, TyperLayout.workspaceBottomPadding)
     }
 
     private var heading: some View {

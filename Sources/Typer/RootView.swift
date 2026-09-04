@@ -62,15 +62,18 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 22) {
+            HStack(spacing: 0) {
                 ForEach(AppSection.allCases) { section in
                     Button { model.section = section } label: {
                         Text(section.rawValue)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(model.section == section ? TyperTheme.ink : TyperTheme.muted)
-                            .padding(.vertical, 20)
+                            .frame(width: TyperLayout.navigationTabWidth, height: TyperLayout.topBarHeight)
+                            .contentShape(Rectangle())
                             .overlay(alignment: .bottom) {
-                                if model.section == section { Rectangle().fill(TyperTheme.signal).frame(height: 2) }
+                                if model.section == section {
+                                    Rectangle().fill(TyperTheme.signal).frame(width: 30, height: 2)
+                                }
                             }
                     }
                     .buttonStyle(.plain)
@@ -87,7 +90,7 @@ struct RootView: View {
         }
         .padding(.leading, 78)
         .padding(.trailing, 16)
-        .frame(height: 58)
+        .frame(height: TyperLayout.topBarHeight)
         .background(TyperTheme.chrome)
         .overlay(alignment: .bottom) { Rectangle().fill(TyperTheme.softLine).frame(height: 1) }
     }
