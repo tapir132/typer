@@ -99,6 +99,19 @@ struct TypingEngineTests {
         #expect(editor.textContainer?.widthTracksTextView == true)
     }
 
+    @Test func longInputPlanningStaysLinear() {
+        let text = String(repeating: "A realistic paragraph has words, punctuation, and pauses. ", count: 1_200)
+        var settings = TypingSettings()
+        settings.mistakeLevel = 3
+        var random = TestGenerator(seed: 99)
+        let clock = ContinuousClock()
+        let elapsed = clock.measure {
+            let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: .baseline(), using: &random)
+            #expect(!plan.events.isEmpty)
+        }
+        #expect(elapsed < .seconds(5))
+    }
+
     private func apply(_ events: [PlannedEvent]) -> String {
         var buffer: [Character] = []
         var cursor = 0

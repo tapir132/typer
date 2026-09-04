@@ -122,6 +122,7 @@ enum TypingEngine {
         using random: inout R
     ) -> TypingPlan {
         guard !text.isEmpty else { return TypingPlan(events: [], duration: 0, repairs: 0, effectiveWPM: 0) }
+        let sourceCharacterCount = text.count
         let wpm = min(180, max(20, settings.wpm))
         let realism = min(1, max(0, settings.variation))
         let base = 12_000 / wpm
@@ -132,6 +133,7 @@ enum TypingEngine {
         let errorRate = settings.mistakeLevel == 0 ? 0 : learnedError * (0.38 + Double(settings.mistakeLevel) * 0.31)
 
         var events: [PlannedEvent] = []
+        events.reserveCapacity(sourceCharacterCount + max(16, sourceCharacterCount / 20))
         var repairs = 0
         var typedCharacters = 0
         var burstRemaining = max(3, Int(profile.burstLength.rounded()))
@@ -164,7 +166,9 @@ enum TypingEngine {
                 interval += (600 + unit() * 600) * realism
                 if unit() < 0.025 { interval += 2_000 + unit() * 3_000 }
             }
-            if settings.fatigueDrift && text.count > 250 { interval *= 1 + (Double(typedCharacters) / Double(text.count)) * 0.09 }
+            if settings.fatigueDrift && sourceCharacterCount > 250 {
+                interval *= 1 + (Double(typedCharacters) / Double(sourceCharacterCount)) * 0.09
+            }
             interval *= 1 + 0.13 * exp(-Double(typedCharacters) / 11)
             let microPauseRoll = unit()
             let microPauseLength = unit()
@@ -278,7 +282,7 @@ enum TypingEngine {
         }
 
         let duration = events.reduce(0) { $0 + $1.flight + $1.dwell }
-        let effective = Int(((Double(text.count) / 5) / max(duration / 60_000, 0.001)).rounded())
+        let effective = Int(((Double(sourceCharacterCount) / 5) / max(duration / 60_000, 0.001)).rounded())
         return TypingPlan(events: events, duration: duration, repairs: repairs, effectiveWPM: effective)
     }
 

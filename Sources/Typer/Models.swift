@@ -9,6 +9,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 
 enum RunState: Equatable {
     case ready
+    case preparing
     case armed(Int)
     case typing
     case complete
@@ -18,6 +19,7 @@ enum RunState: Equatable {
     var label: String {
         switch self {
         case .ready: return "Ready"
+        case .preparing: return "Preparing"
         case .armed(let count): return "Armed · \(count)"
         case .typing: return "Typing"
         case .complete: return "Complete"

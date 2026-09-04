@@ -9,6 +9,7 @@ final class TypingController: ObservableObject {
     @Published private(set) var lastPlan: TypingPlan?
 
     private var countdownTask: Task<Void, Never>?
+    private var planningTask: Task<Void, Never>?
     private var workItem: DispatchWorkItem?
 
     init() {
@@ -37,7 +38,29 @@ final class TypingController: ObservableObject {
             return
         }
         stop(resetState: false)
-        let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: profile)
+        state = .preparing
+        planningTask = Task { [weak self] in
+            let plan = await Task.detached(priority: .userInitiated) {
+                TypingEngine.generatePlan(text: text, settings: settings, profile: profile)
+            }.value
+            guard !Task.isCancelled, let self else { return }
+            self.planningTask = nil
+            self.startCountdown(with: plan)
+        }
+    }
+
+    func start(plan: TypingPlan) {
+        guard !plan.events.isEmpty else { return }
+        guard accessibilityGranted else {
+            _ = requestAccessibility()
+            state = .error("Enable Typer in System Settings → Privacy & Security → Accessibility.")
+            return
+        }
+        stop(resetState: false)
+        startCountdown(with: plan)
+    }
+
+    private func startCountdown(with plan: TypingPlan) {
         lastPlan = plan
         state = .armed(5)
         countdownTask = Task { [weak self] in
@@ -57,6 +80,8 @@ final class TypingController: ObservableObject {
     }
 
     func stop(resetState: Bool = true) {
+        planningTask?.cancel()
+        planningTask = nil
         countdownTask?.cancel()
         countdownTask = nil
         workItem?.cancel()

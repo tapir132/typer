@@ -20,6 +20,7 @@ final class AppModel: ObservableObject {
     let controller = TypingController()
     private var previewTask: Task<Void, Never>?
     private var previewRevision = 0
+    private var previewAppliedRevision = 0
 
     init() {
         if CommandLine.arguments.contains("--train") { section = .train }
@@ -42,7 +43,11 @@ final class AppModel: ObservableObject {
             requestAccessibilityPermission()
             return
         }
-        controller.start(text: sourceText, settings: playbackSettings, profile: playbackProfile)
+        if previewAppliedRevision == previewRevision, !previewPlan.events.isEmpty {
+            controller.start(plan: previewPlan)
+        } else {
+            controller.start(text: sourceText, settings: playbackSettings, profile: playbackProfile)
+        }
     }
 
     func requestAccessibilityPermission() {
@@ -70,6 +75,7 @@ final class AppModel: ObservableObject {
 
     private func refreshPreviewImmediately() {
         previewPlan = Self.makePreview(text: sourceText, settings: playbackSettings, profile: playbackProfile)
+        previewAppliedRevision = previewRevision
     }
 
     private func schedulePreviewRefresh() {
@@ -87,6 +93,7 @@ final class AppModel: ObservableObject {
             }.value
             guard !Task.isCancelled, let self, revision == self.previewRevision else { return }
             self.previewPlan = plan
+            self.previewAppliedRevision = revision
         }
     }
 

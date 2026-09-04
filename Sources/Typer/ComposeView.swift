@@ -167,7 +167,7 @@ struct ComposeView: View {
                 .padding(.horizontal, 14)
             }
             .buttonStyle(PrimaryButtonStyle())
-            .disabled(model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.state == .typing || isArmed)
+            .disabled(model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.state == .typing || controller.state == .preparing || isArmed)
 
             Text("Switch apps during the five-second countdown. Stop anytime with ⌘ Esc or ⌃ Esc.")
                 .font(.system(size: 9)).foregroundStyle(TyperTheme.muted).multilineTextAlignment(.center).lineSpacing(2)
