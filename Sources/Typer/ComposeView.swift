@@ -199,13 +199,23 @@ struct ComposeView: View {
     }
 
     private func compactToggle(_ title: String, note: String, binding: Binding<Bool>) -> some View {
-        Toggle(isOn: binding) {
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 10, weight: .medium))
                 Text(note).font(.system(size: 8.5)).foregroundStyle(TyperTheme.muted)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Toggle("", isOn: binding)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .tint(TyperTheme.primary)
+                .accessibilityLabel(Text(title))
+                .accessibilityHint(Text(note))
         }
-        .toggleStyle(.switch).controlSize(.mini).tint(TyperTheme.primary).padding(.vertical, 3)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 3)
     }
 
     private func formatted(_ milliseconds: Double) -> String {
