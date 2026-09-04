@@ -13,6 +13,13 @@ struct TrainingView: View {
             case .sprint: return "Learns your fast bursts, shortest dwell, and correction reflex."
             }
         }
+        var instruction: String {
+            switch self {
+            case .copy: return "Copy the passage exactly. If you make a real mistake, correct it the way you normally would—do not invent mistakes for the test."
+            case .freewrite: return "Write fresh thoughts directly in the box. Pause, revise, and backspace naturally; do not prepare or paste polished text first."
+            case .sprint: return "Copy the sprint prompt as quickly as feels comfortable. Keep moving, but still correct a mistake if that is what you would normally do."
+            }
+        }
     }
 
     @ObservedObject var model: AppModel
@@ -24,6 +31,7 @@ struct TrainingView: View {
     @State private var startedAt: Double?
     @State private var lastMistakeAt: Double?
     @State private var activePresses: [UInt16: UUID] = [:]
+    @State private var showsTrainingGuide = false
 
     private let passages = [
         "The tiny bookstore stayed open after midnight, its windows glowing against the rain. I stepped inside for five minutes and left an hour later with three novels and a new favorite place.",
@@ -45,6 +53,10 @@ struct TrainingView: View {
                     Text("Type naturally—correct mistakes, pause, and change your mind like you normally would.").font(.system(size: 13)).foregroundStyle(TyperTheme.mutedStrong)
                 }
                 Spacer()
+                Button { showsTrainingGuide = true } label: {
+                    Label("How training works", systemImage: "questionmark.circle")
+                }
+                .buttonStyle(QuietButtonStyle())
                 HStack(alignment: .firstTextBaseline, spacing: 9) {
                     Text("\(min(profiles.samples.count, 3)) / 3").font(.system(size: 19, weight: .semibold, design: .monospaced)).foregroundStyle(TyperTheme.signal)
                     Text("samples\nrecorded").font(.system(size: 9)).foregroundStyle(TyperTheme.muted)
@@ -68,6 +80,7 @@ struct TrainingView: View {
         .padding(.top, 34)
         .padding(.bottom, 34)
         .onChange(of: mode) { _, _ in reset(changePassage: false) }
+        .sheet(isPresented: $showsTrainingGuide) { trainingGuide }
     }
 
     private var trainingStage: some View {
@@ -84,7 +97,11 @@ struct TrainingView: View {
             }
             .frame(height: 58)
 
-            Text(mode.description).font(.system(size: 10)).foregroundStyle(TyperTheme.muted).padding(.bottom, 20)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(mode.description).font(.system(size: 10, weight: .medium)).foregroundStyle(TyperTheme.mutedStrong)
+                Text(mode.instruction).font(.system(size: 10)).foregroundStyle(TyperTheme.muted).lineSpacing(3)
+            }
+            .padding(.bottom, 18)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(mode == .freewrite ? "WRITE NATURALLY" : mode == .sprint ? "TYPE FAST—ACCURACY SECOND" : "COPY THIS PASSAGE")
@@ -108,6 +125,52 @@ struct TrainingView: View {
                 Button("Save sample") { saveSample() }.buttonStyle(SecondaryButtonStyle()).disabled(!canSave)
             }
             .padding(.top, 11)
+        }
+    }
+
+    private var trainingGuide: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("How training works").font(.system(size: 21, weight: .semibold))
+                    Text("Three different samples teach Typer more than repeating one exercise.")
+                        .font(.system(size: 12)).foregroundStyle(TyperTheme.mutedStrong)
+                }
+                Spacer()
+                Button("Done") { showsTrainingGuide = false }.buttonStyle(QuietButtonStyle())
+            }
+
+            guideStep(number: "1", title: "Copy", detail: "Type the shown passage accurately. Correct genuine mistakes exactly as you normally would.")
+            guideStep(number: "2", title: "Freewrite", detail: "Compose 3–5 new sentences in the box. Natural thinking pauses and revisions are useful data.")
+            guideStep(number: "3", title: "Sprint", detail: "Type the sprint prompt quickly. Prioritize flow, while handling mistakes with your normal reflexes.")
+
+            VStack(alignment: .leading, spacing: 7) {
+                Label("Do one of each for the best starting profile.", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(TyperTheme.signal)
+                Text("You do not need to repeat the same passage. Do not deliberately add or hide mistakes. If you usually fix an error, fix it; if you would naturally leave it, leave it. Extra samples keep refining the profile, using your five most recent samples.")
+                    .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong).lineSpacing(4)
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .padding(15)
+            .typerSurface(radius: 10)
+        }
+        .padding(26)
+        .frame(width: 540)
+        .background(TyperTheme.background)
+    }
+
+    private func guideStep(number: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: 13) {
+            Text(number)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(TyperTheme.background)
+                .frame(width: 24, height: 24)
+                .background(TyperTheme.primary)
+                .clipShape(Circle())
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(detail).font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong).lineSpacing(3)
+            }
         }
     }
 

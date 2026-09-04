@@ -40,12 +40,12 @@ struct ComposeView: View {
             }
             Spacer()
             HStack(spacing: 10) {
-                Text(initials(profiles.activeProfile.name))
-                    .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(TyperTheme.signal)
+                Image(systemName: model.isUsingLearnedProfile ? "person.wave.2.fill" : "waveform.path")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(model.isUsingLearnedProfile ? TyperTheme.signal : TyperTheme.mutedStrong)
                     .frame(width: 34, height: 34).background(TyperTheme.raised).clipShape(RoundedRectangle(cornerRadius: 9))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Active profile").font(.system(size: 9)).foregroundStyle(TyperTheme.muted)
-                    Text(profiles.activeProfile.name).font(.system(size: 12, weight: .semibold))
+                    Text(model.performanceSourceTitle).font(.system(size: 9)).foregroundStyle(model.isUsingLearnedProfile ? TyperTheme.signal : TyperTheme.muted)
+                    Text(model.performanceSourceDetail).font(.system(size: 11, weight: .semibold))
                 }
             }
         }
@@ -119,6 +119,16 @@ struct ComposeView: View {
                 }
                 .labelsHidden().pickerStyle(.segmented)
                 Text(modeDescription).controlNote()
+                HStack(spacing: 7) {
+                    Circle().fill(model.isUsingLearnedProfile ? TyperTheme.signal : TyperTheme.muted).frame(width: 6, height: 6)
+                    Text(model.performanceSourceTitle)
+                    Spacer()
+                    if !model.isUsingLearnedProfile {
+                        Button("Train") { model.section = .train }.buttonStyle(QuietButtonStyle())
+                    }
+                }
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(model.isUsingLearnedProfile ? TyperTheme.signal : TyperTheme.mutedStrong)
             }
 
             controlGroup {
@@ -196,7 +206,6 @@ struct ComposeView: View {
         .toggleStyle(.switch).controlSize(.mini).tint(TyperTheme.primary).padding(.vertical, 3)
     }
 
-    private func initials(_ name: String) -> String { name.split(separator: " ").prefix(2).compactMap(\.first).map(String.init).joined().uppercased() }
     private func formatted(_ milliseconds: Double) -> String {
         let seconds = max(0, Int((milliseconds / 1_000).rounded()))
         return "\(seconds / 60):\(String(format: "%02d", seconds % 60))"

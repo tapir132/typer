@@ -5,19 +5,28 @@ import Foundation
 @MainActor
 final class AppModel: ObservableObject {
     @Published var section: AppSection = .compose
-    @Published var sourceText = "Hey — quick update. I finished the first pass and pushed the changes. There are still a couple of rough edges, but the core flow is working really well now."
-    @Published var settings = TypingSettings()
+    @Published var sourceText = "Hey — quick update. I finished the first pass and pushed the changes. There are still a couple of rough edges, but the core flow is working really well now." {
+        didSet { schedulePreviewRefresh() }
+    }
+    @Published var settings = TypingSettings() {
+        didSet { schedulePreviewRefresh() }
+    }
     @Published var showsSystemSetup = false
     @Published var toast: String?
     @Published private(set) var accessibilityAuthorized = false
+    @Published private(set) var previewPlan = TypingPlan(events: [], duration: 0, repairs: 0, effectiveWPM: 0)
 
     let profiles = ProfileStore()
     let controller = TypingController()
+    private var previewTask: Task<Void, Never>?
+    private var previewRevision = 0
 
     init() {
         if CommandLine.arguments.contains("--train") { section = .train }
         if CommandLine.arguments.contains("--profiles") { section = .profiles }
+        profiles.onChange = { [weak self] in self?.schedulePreviewRefresh() }
         refreshPermissions()
+        refreshPreviewImmediately()
     }
 
     func paste() {
@@ -59,15 +68,37 @@ final class AppModel: ObservableObject {
         }
     }
 
-    var previewPlan: TypingPlan {
-        // Timing controls intentionally do not change the preview's random typo
-        // choices. Variation changes cadence; Mistake frequency changes repairs.
-        let seedMaterial = "\(sourceText)|\(settings.mode.rawValue)|\(settings.mistakeLevel)|\(settings.delayedRepairs)|\(playbackProfile.id)"
-        var generator = SeededGenerator(seed: stableSeed(seedMaterial))
-        return TypingEngine.generatePlan(text: sourceText, settings: playbackSettings, profile: playbackProfile, using: &generator)
+    private func refreshPreviewImmediately() {
+        previewPlan = Self.makePreview(text: sourceText, settings: playbackSettings, profile: playbackProfile)
     }
 
-    private func stableSeed(_ value: String) -> UInt64 {
+    private func schedulePreviewRefresh() {
+        previewTask?.cancel()
+        previewRevision += 1
+        let revision = previewRevision
+        let text = sourceText
+        let settings = playbackSettings
+        let profile = playbackProfile
+        previewTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            let plan = await Task.detached(priority: .userInitiated) {
+                Self.makePreview(text: text, settings: settings, profile: profile)
+            }.value
+            guard !Task.isCancelled, let self, revision == self.previewRevision else { return }
+            self.previewPlan = plan
+        }
+    }
+
+    private nonisolated static func makePreview(text: String, settings: TypingSettings, profile: TypingProfile) -> TypingPlan {
+        // Timing controls intentionally do not change the preview's random typo
+        // choices. Variation changes cadence; Mistake frequency changes repairs.
+        let seedMaterial = "\(text)|\(settings.mode.rawValue)|\(settings.mistakeLevel)|\(settings.delayedRepairs)|\(profile.id)"
+        var generator = SeededGenerator(seed: stableSeed(seedMaterial))
+        return TypingEngine.generatePlan(text: text, settings: settings, profile: profile, using: &generator)
+    }
+
+    private nonisolated static func stableSeed(_ value: String) -> UInt64 {
         value.utf8.reduce(14_695_981_039_346_656_037) { hash, byte in
             (hash ^ UInt64(byte)) &* 1_099_511_628_211
         }
@@ -81,6 +112,26 @@ final class AppModel: ObservableObject {
         var result = settings
         if settings.mode == .clean { result.mistakeLevel = 0 }
         return result
+    }
+
+    var isUsingLearnedProfile: Bool {
+        settings.mode == .personal && profiles.activeProfile.sampleCount > 0
+    }
+
+    var performanceSourceTitle: String {
+        isUsingLearnedProfile ? "Using your profile" : "Using generic rhythm"
+    }
+
+    var performanceSourceDetail: String {
+        if isUsingLearnedProfile {
+            let count = profiles.activeProfile.sampleCount
+            return "My rhythm · \(count) learned sample\(count == 1 ? "" : "s")"
+        }
+        switch settings.mode {
+        case .personal: return "No saved samples yet—using the built-in model"
+        case .natural: return "Research-informed timing and correction habits"
+        case .clean: return "Human cadence with generated mistakes disabled"
+        }
     }
 }
 

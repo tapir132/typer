@@ -5,8 +5,12 @@ final class ProfileStore: ObservableObject {
     @Published private(set) var profiles: [TypingProfile] = []
     @Published private(set) var samples: [TrainingSample] = []
     @Published var activeProfileID: UUID = TypingProfile.baselineID {
-        didSet { defaults.set(activeProfileID.uuidString, forKey: Keys.activeProfile) }
+        didSet {
+            defaults.set(activeProfileID.uuidString, forKey: Keys.activeProfile)
+            onChange?()
+        }
     }
+    var onChange: (() -> Void)?
 
     private let defaults = UserDefaults.standard
     private let encoder = JSONEncoder()
