@@ -11,13 +11,16 @@ final class AppModel: ObservableObject {
     @Published var settings = TypingSettings() {
         didSet { schedulePreviewRefresh() }
     }
+    @Published var trainingMode: TrainingMode = .copy
     @Published var showsSystemSetup = false
     @Published var toast: String?
     @Published private(set) var accessibilityAuthorized = false
+    @Published private(set) var inputMonitoringAuthorized = false
     @Published private(set) var previewPlan = TypingPlan(events: [], duration: 0, repairs: 0, effectiveWPM: 0)
 
     let profiles = ProfileStore()
     let controller = TypingController()
+    let liveCapture = GlobalTrainingCapture()
     private var previewTask: Task<Void, Never>?
     private var previewRevision = 0
     private var previewAppliedRevision = 0
@@ -25,6 +28,10 @@ final class AppModel: ObservableObject {
     init() {
         if CommandLine.arguments.contains("--train") { section = .train }
         if CommandLine.arguments.contains("--profiles") { section = .profiles }
+        if CommandLine.arguments.contains("--live-capture") {
+            section = .train
+            trainingMode = .liveCapture
+        }
         profiles.onChange = { [weak self] in self?.schedulePreviewRefresh() }
         refreshPermissions()
         refreshPreviewImmediately()
@@ -37,6 +44,10 @@ final class AppModel: ObservableObject {
 
     func arm() {
         guard !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !liveCapture.isCapturing else {
+            showToast("Stop Live capture before starting playback.")
+            return
+        }
         refreshPermissions()
         if !accessibilityAuthorized {
             showsSystemSetup = true
@@ -60,9 +71,23 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func requestInputMonitoringPermission() {
+        _ = CGRequestListenEventAccess()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.refreshPermissions()
+        }
+    }
+
     func refreshPermissions() {
         let trusted = AXIsProcessTrusted()
         if trusted != accessibilityAuthorized { accessibilityAuthorized = trusted }
+        let canListen = CGPreflightListenEventAccess()
+        if canListen != inputMonitoringAuthorized { inputMonitoringAuthorized = canListen }
+    }
+
+    func openInputMonitoringSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     func showToast(_ message: String) {

@@ -1,30 +1,9 @@
 import SwiftUI
 
 struct TrainingView: View {
-    private enum TrainingMode: String, CaseIterable, Identifiable {
-        case copy = "Copy"
-        case freewrite = "Freewrite"
-        case sprint = "Sprint"
-        var id: String { rawValue }
-        var description: String {
-            switch self {
-            case .copy: return "Learns errors, substitutions, and exact digraph timing."
-            case .freewrite: return "Learns thought pauses and your natural composition rhythm."
-            case .sprint: return "Learns your fast bursts, shortest dwell, and correction reflex."
-            }
-        }
-        var instruction: String {
-            switch self {
-            case .copy: return "Copy the passage exactly. If you make a real mistake, correct it the way you normally would—do not invent mistakes for the test."
-            case .freewrite: return "Write fresh thoughts directly in the box. Pause, revise, and backspace naturally; do not prepare or paste polished text first."
-            case .sprint: return "Copy the sprint prompt as quickly as feels comfortable. Keep moving, but still correct a mistake if that is what you would normally do."
-            }
-        }
-    }
-
     @ObservedObject var model: AppModel
     @ObservedObject private var profiles: ProfileStore
-    @State private var mode: TrainingMode = .copy
+    @ObservedObject private var liveCapture: GlobalTrainingCapture
     @State private var passageIndex = 0
     @State private var input = ""
     @State private var records: [TrainingKeyRecord] = []
@@ -43,6 +22,7 @@ struct TrainingView: View {
     init(model: AppModel) {
         self.model = model
         profiles = model.profiles
+        liveCapture = model.liveCapture
     }
 
     var body: some View {
@@ -79,29 +59,39 @@ struct TrainingView: View {
         .padding(.horizontal, TyperLayout.workspaceHorizontalPadding)
         .padding(.top, TyperLayout.workspaceTopPadding)
         .padding(.bottom, TyperLayout.workspaceBottomPadding)
-        .onChange(of: mode) { _, _ in reset(changePassage: false) }
+        .onChange(of: model.trainingMode) { _, newMode in
+            if newMode != .liveCapture { reset(changePassage: false) }
+        }
         .sheet(isPresented: $showsTrainingGuide) { trainingGuide }
     }
+
+    private var mode: TrainingMode { model.trainingMode }
 
     private var trainingStage: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Picker("Training mode", selection: $mode) {
+                Picker("Training mode", selection: $model.trainingMode) {
                     ForEach(TrainingMode.allCases) { mode in Text(mode.rawValue).tag(mode) }
                 }
-                .labelsHidden().pickerStyle(.segmented).frame(width: 310)
+                .labelsHidden().pickerStyle(.segmented).frame(width: 410)
                 Spacer()
-                if mode != .freewrite {
+                if mode != .freewrite && mode != .liveCapture {
                     Button("Try another passage") { reset(changePassage: true) }.buttonStyle(QuietButtonStyle())
                 }
             }
             .frame(height: 58)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(mode.description).font(.system(size: 10, weight: .medium)).foregroundStyle(TyperTheme.mutedStrong)
-                Text(mode.instruction).font(.system(size: 10)).foregroundStyle(TyperTheme.muted).lineSpacing(3)
+            if mode == .liveCapture {
+                liveCaptureStage
+            } else {
+                standardTrainingStage
             }
-            .padding(.bottom, 18)
+        }
+    }
+
+    private var standardTrainingStage: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            trainingInstructions
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(mode == .freewrite ? "WRITE NATURALLY" : mode == .sprint ? "TYPE FAST—ACCURACY SECOND" : "COPY THIS PASSAGE")
@@ -128,6 +118,73 @@ struct TrainingView: View {
         }
     }
 
+    private var trainingInstructions: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(mode.description).font(.system(size: 10, weight: .medium)).foregroundStyle(TyperTheme.mutedStrong)
+            Text(mode.instruction).font(.system(size: 10)).foregroundStyle(TyperTheme.muted).lineSpacing(3)
+        }
+        .padding(.bottom, 18)
+    }
+
+    private var liveCaptureStage: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            trainingInstructions
+
+            HStack(spacing: 16) {
+                Image(systemName: liveCapture.isCapturing ? "record.circle.fill" : "keyboard.badge.ellipsis")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundStyle(liveCapture.isCapturing ? TyperTheme.danger : TyperTheme.signal)
+                    .frame(width: 42, height: 42)
+                    .background(TyperTheme.raised)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(liveCaptureTitle).font(.system(size: 13, weight: .semibold))
+                    Text(liveCaptureDetail).font(.system(size: 10)).foregroundStyle(TyperTheme.mutedStrong)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 3) {
+                    Text("\(liveCapture.characterCount) typed").font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    Text("\(liveCapture.backspaceCount) repairs · \(formatCaptureDuration(liveCapture.elapsedMilliseconds))")
+                        .font(.system(size: 9, design: .monospaced)).foregroundStyle(TyperTheme.muted)
+                }
+            }
+            .padding(18)
+            .background(TyperTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "lock.shield.fill").foregroundStyle(TyperTheme.signal)
+                Text("Opt-in session only. Typer never blocks or rewrites the target app's events. Raw keystrokes exist only in memory while recording and are discarded when you stop; only timing statistics are saved.")
+                    .font(.system(size: 10)).foregroundStyle(TyperTheme.mutedStrong).lineSpacing(3)
+            }
+
+            if let notice = liveCapture.notice {
+                Text(notice).font(.system(size: 10, weight: .medium)).foregroundStyle(TyperTheme.danger)
+            }
+
+            HStack(spacing: 10) {
+                if liveCapture.isCapturing {
+                    Button("Stop capture") { stopLiveCapture() }.buttonStyle(SecondaryButtonStyle())
+                    Button("Discard session") { liveCapture.discard() }.buttonStyle(QuietButtonStyle())
+                } else {
+                    Button(liveCapture.characterCount > 0 ? "Start over" : "Start live capture") { startLiveCapture() }
+                        .buttonStyle(SecondaryButtonStyle())
+                    if liveCapture.characterCount > 0 {
+                        Button("Save sample") { saveLiveSample() }
+                            .buttonStyle(SecondaryButtonStyle())
+                            .disabled(!liveCapture.canSave)
+                        Button("Discard") { liveCapture.discard() }.buttonStyle(QuietButtonStyle())
+                    }
+                }
+            }
+
+            Text("A useful session needs at least \(GlobalTrainingCapture.minimumCharacters) typed characters. Recording stops automatically after 15 minutes and pauses whenever macOS Secure Input is active.")
+                .font(.system(size: 9)).foregroundStyle(TyperTheme.muted).lineSpacing(2)
+            Spacer()
+        }
+    }
+
     private var trainingGuide: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top) {
@@ -143,6 +200,7 @@ struct TrainingView: View {
             guideStep(number: "1", title: "Copy", detail: "Type the shown passage accurately. Correct genuine mistakes exactly as you normally would.")
             guideStep(number: "2", title: "Freewrite", detail: "Compose 3–5 new sentences in the box. Natural thinking pauses and revisions are useful data.")
             guideStep(number: "3", title: "Sprint", detail: "Type the sprint prompt quickly. Prioritize flow, while handling mistakes with your normal reflexes.")
+            guideStep(number: "+", title: "Live capture", detail: "Optionally record a timed session while writing in another app. Raw text is discarded when the session stops.")
 
             VStack(alignment: .leading, spacing: 7) {
                 Label("Do one of each for the best starting profile.", systemImage: "checkmark.circle.fill")
@@ -179,9 +237,12 @@ struct TrainingView: View {
             HStack {
                 Text("Live fingerprint").font(.system(size: 12, weight: .semibold))
                 Spacer()
-                HStack(spacing: 5) { Circle().fill(TyperTheme.signal).frame(width: 5, height: 5); Text("listening") }
-                    .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.signal)
-                    .padding(.horizontal, 7).padding(.vertical, 5).background(TyperTheme.signal.opacity(0.09)).clipShape(Capsule())
+                HStack(spacing: 5) {
+                    Circle().fill(fingerprintStatusColor).frame(width: 5, height: 5)
+                    Text(fingerprintStatus)
+                }
+                .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(fingerprintStatusColor)
+                .padding(.horizontal, 7).padding(.vertical, 5).background(fingerprintStatusColor.opacity(0.09)).clipShape(Capsule())
             }
             .frame(height: 58)
 
@@ -195,7 +256,7 @@ struct TrainingView: View {
 
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "lock.fill").foregroundStyle(TyperTheme.signal).font(.system(size: 10)).padding(.top, 1)
-                Text("Stored on this Mac. Raw samples never leave the app.")
+                Text(mode == .liveCapture ? "Only derived timing statistics are saved. Raw captured text is discarded." : "Stored on this Mac. Raw samples never leave the app.")
                     .font(.system(size: 9)).foregroundStyle(TyperTheme.muted).lineSpacing(2)
             }
             .padding(13).typerSurface(radius: 10).padding(.top, 22)
@@ -208,14 +269,42 @@ struct TrainingView: View {
         case .copy: return passages[passageIndex]
         case .sprint: return "Quick hands make small mistakes; good typists recover without losing the thread. Keep moving and let corrections happen naturally."
         case .freewrite: return "Write 3–5 sentences about what you built today, a problem you solved, or what you want to do next. Don't polish it first."
+        case .liveCapture: return ""
         }
     }
 
     private var target: String { mode == .freewrite ? input : prompt }
     private var elapsed: Double { max(1, (records.last?.pressTime ?? startedAt ?? 0) - (startedAt ?? 0)) }
     private var sample: TrainingSample? {
+        if mode == .liveCapture { return liveCapture.previewSample }
         guard records.filter({ $0.kind == .character }).count >= 2 else { return nil }
         return TypingEngine.summarize(records: records, target: target, duration: elapsed)
+    }
+
+    private var fingerprintStatus: String {
+        if mode != .liveCapture { return "listening" }
+        if liveCapture.secureInputActive { return "secure input · paused" }
+        if liveCapture.isCapturing { return "recording" }
+        if liveCapture.capturedSample != nil { return "ready to save" }
+        return "idle"
+    }
+
+    private var fingerprintStatusColor: Color {
+        mode == .liveCapture && liveCapture.isCapturing ? TyperTheme.danger : TyperTheme.signal
+    }
+
+    private var liveCaptureTitle: String {
+        if liveCapture.secureInputActive { return "Paused for Secure Input" }
+        if liveCapture.isCapturing { return "Recording outside Typer" }
+        if liveCapture.capturedSample != nil { return "Session ready to save" }
+        return "Ready for an opt-in session"
+    }
+
+    private var liveCaptureDetail: String {
+        if liveCapture.secureInputActive { return "Password and protected fields are not recorded." }
+        if liveCapture.isCapturing { return "Switch to your editor and type normally. Return here when finished." }
+        if liveCapture.characterCount > 0 { return liveCapture.canSave ? "The raw keystrokes have been discarded." : "This session is too short to save; start over or discard it." }
+        return "Input Monitoring is used only after you press Start live capture."
     }
     private var progress: Double {
         if mode == .freewrite { return min(1, Double(input.count) / 180) }
@@ -258,6 +347,39 @@ struct TrainingView: View {
     private func reset(changePassage: Bool) {
         if changePassage { passageIndex = (passageIndex + 1) % passages.count }
         input = ""; records = []; startedAt = nil; lastMistakeAt = nil; activePresses = [:]
+    }
+
+    private func startLiveCapture() {
+        model.refreshPermissions()
+        guard model.inputMonitoringAuthorized else {
+            model.showsSystemSetup = true
+            model.requestInputMonitoringPermission()
+            model.showToast("Allow Input Monitoring, then start Live capture again.")
+            return
+        }
+        if liveCapture.start() {
+            model.showToast("Live capture started. Switch to the app where you want to write.")
+        } else if let notice = liveCapture.notice {
+            model.showToast(notice)
+        }
+    }
+
+    private func stopLiveCapture() {
+        liveCapture.stop()
+        model.showToast(liveCapture.canSave ? "Capture stopped. Review and save the sample." : "Capture stopped. At least 35 typed characters are needed.")
+    }
+
+    private func saveLiveSample() {
+        guard let sample = liveCapture.capturedSample, liveCapture.canSave else { return }
+        profiles.add(sample: sample)
+        model.settings.mode = .personal
+        liveCapture.discard()
+        model.showToast("Live capture added to My rhythm.")
+    }
+
+    private func formatCaptureDuration(_ milliseconds: Double) -> String {
+        let seconds = max(0, Int(milliseconds / 1_000))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     private func saveSample() {

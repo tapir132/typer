@@ -183,7 +183,35 @@ struct TypingEngineTests {
         let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: .baseline(), using: &random)
         #expect(plan.events.contains { $0.flight > 8_000 })
         #expect(plan.events.allSatisfy { $0.flight <= 45_000 })
+        #expect(plan.duration == plan.events.reduce(0) { $0 + $1.flight + $1.dwell })
         #expect(apply(plan.events) == text)
+    }
+
+    @Test func globalCaptureLearnsTimingWithoutAReferencePassage() throws {
+        var capture = GlobalCaptureAccumulator()
+        var timestamp = 1_000.0
+        let keys: [(UInt16, String)] = [(17, "t"), (4, "h"), (14, "e"), (49, " ")]
+        for index in 0..<40 {
+            let key = keys[index % keys.count]
+            capture.keyDown(keyCode: key.0, characters: key.1, timestamp: timestamp, isRepeat: false)
+            capture.keyUp(keyCode: key.0, timestamp: timestamp + 72)
+            timestamp += 145
+        }
+        capture.keyDown(keyCode: 51, characters: "", timestamp: timestamp + 260, isRepeat: false)
+        capture.keyDown(keyCode: 51, characters: "", timestamp: timestamp + 310, isRepeat: false)
+
+        let sample = try #require(capture.makeSample())
+        #expect(capture.characterCount == 40)
+        #expect(capture.backspaceCount == 2)
+        #expect(sample.dwellMedian == 72)
+        #expect(sample.detectionCharacters == 1)
+        #expect(sample.digraphs["th"]?.isEmpty == false)
+    }
+
+    @Test func liveCaptureIsExplicitAndTimeLimited() {
+        #expect(TrainingMode.allCases.contains(.liveCapture))
+        #expect(GlobalTrainingCapture.minimumCharacters == 35)
+        #expect(GlobalTrainingCapture.maximumDuration == 15 * 60 * 1_000)
     }
 
     private func apply(_ events: [PlannedEvent]) -> String {

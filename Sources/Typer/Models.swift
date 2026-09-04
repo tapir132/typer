@@ -7,6 +7,33 @@ enum AppSection: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum TrainingMode: String, CaseIterable, Identifiable {
+    case copy = "Copy"
+    case freewrite = "Freewrite"
+    case sprint = "Sprint"
+    case liveCapture = "Live capture"
+
+    var id: String { rawValue }
+
+    var description: String {
+        switch self {
+        case .copy: return "Learns errors, substitutions, and exact digraph timing."
+        case .freewrite: return "Learns thought pauses and your natural composition rhythm."
+        case .sprint: return "Learns your fast bursts, shortest dwell, and correction reflex."
+        case .liveCapture: return "Learns from normal writing in another app without delaying its keystrokes."
+        }
+    }
+
+    var instruction: String {
+        switch self {
+        case .copy: return "Copy the passage exactly. Correct real mistakes normally—do not invent mistakes for the test."
+        case .freewrite: return "Write fresh thoughts directly in the box. Pause, revise, and backspace naturally; do not paste polished text."
+        case .sprint: return "Copy the prompt quickly. Keep moving, but still correct mistakes using your normal reflexes."
+        case .liveCapture: return "Start a private session, switch to Google Docs or another editor, then type normally. Return here to stop and save."
+        }
+    }
+}
+
 enum RunState: Equatable {
     case ready
     case preparing

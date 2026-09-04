@@ -4,12 +4,14 @@ struct RootView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var controller: TypingController
     @ObservedObject private var profiles: ProfileStore
+    @ObservedObject private var liveCapture: GlobalTrainingCapture
     @ObservedObject private var updates = UpdateManager.shared
 
     init(model: AppModel) {
         self.model = model
         controller = model.controller
         profiles = model.profiles
+        liveCapture = model.liveCapture
     }
 
     var body: some View {
@@ -30,6 +32,11 @@ struct RootView: View {
             if case .armed(let count) = controller.state {
                 countdownOverlay(count)
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
+
+            if controller.state == .typing {
+                runningOverlay
+                    .transition(.opacity)
             }
 
             if let toast = model.toast {
@@ -81,8 +88,26 @@ struct RootView: View {
             }
 
             HStack(spacing: 9) {
-                Circle().fill(statusColor).frame(width: 7, height: 7)
-                Text(controller.state.label).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.mutedStrong)
+                if liveCapture.isCapturing {
+                    Button {
+                        liveCapture.stop()
+                        model.trainingMode = .liveCapture
+                        model.section = .train
+                        model.showToast(liveCapture.canSave ? "Live capture stopped. Review and save the sample." : "Live capture stopped. At least 35 typed characters are needed.")
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle().fill(TyperTheme.danger).frame(width: 7, height: 7)
+                            Text("Stop capture").font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(TyperTheme.danger)
+                        }
+                        .frame(minHeight: 40)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Stop the opt-in global training session")
+                } else {
+                    Circle().fill(statusColor).frame(width: 7, height: 7)
+                    Text(controller.state.label).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.mutedStrong)
+                }
                 Button { model.showsSystemSetup = true } label: { Image(systemName: "gearshape").font(.system(size: 13)) }
                     .buttonStyle(QuietButtonStyle())
             }
@@ -121,12 +146,34 @@ struct RootView: View {
         }
     }
 
+    private var runningOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.76).ignoresSafeArea()
+            VStack(spacing: 14) {
+                Image(systemName: "keyboard.fill")
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundStyle(TyperTheme.signal)
+                Text("Typing in the active app").font(.system(size: 20, weight: .semibold))
+                Text("Stop anytime with  ⌘ Esc  /  ⌃ Esc")
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(TyperTheme.mutedStrong)
+                Button("Stop typing") { controller.stop() }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .padding(.top, 4)
+            }
+            .padding(32)
+            .frame(width: 390)
+            .background(TyperTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
     private var systemSetup: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("System setup").font(.system(size: 20, weight: .semibold))
-                    Text("One permission enables native cross-app typing.").font(.system(size: 12)).foregroundStyle(TyperTheme.mutedStrong)
+                    Text("Permissions for cross-app typing and optional Live capture.").font(.system(size: 12)).foregroundStyle(TyperTheme.mutedStrong)
                 }
                 Spacer()
                 Button("Done") { model.showsSystemSetup = false }.buttonStyle(QuietButtonStyle())
@@ -142,6 +189,18 @@ struct RootView: View {
                 Spacer()
             }
             .padding(15).typerSurface(radius: 10)
+            HStack(spacing: 12) {
+                Image(systemName: model.inputMonitoringAuthorized ? "checkmark.shield.fill" : "waveform.badge.exclamationmark")
+                    .foregroundStyle(model.inputMonitoringAuthorized ? TyperTheme.signal : TyperTheme.mutedStrong)
+                    .font(.system(size: 22))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Input Monitoring").font(.system(size: 13, weight: .semibold))
+                    Text(model.inputMonitoringAuthorized ? "Enabled for opt-in Live capture" : "Optional · required only for Live capture")
+                        .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
+                }
+                Spacer()
+            }
+            .padding(15).typerSurface(radius: 10)
             HStack(spacing: 10) {
                 Button(model.accessibilityAuthorized ? "Permission enabled" : "Request permission") {
                     model.requestAccessibilityPermission()
@@ -151,7 +210,15 @@ struct RootView: View {
                 Button("Open System Settings") { controller.openAccessibilitySettings() }.buttonStyle(SecondaryButtonStyle())
             }
             .frame(maxWidth: .infinity)
-            Text("In Privacy & Security → Accessibility, enable Typer. Your source text and learned profile stay on this Mac.")
+            HStack(spacing: 10) {
+                Button(model.inputMonitoringAuthorized ? "Input Monitoring enabled" : "Allow Live capture") {
+                    model.requestInputMonitoringPermission()
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.inputMonitoringAuthorized)
+                Button("Open Input Monitoring") { model.openInputMonitoringSettings() }.buttonStyle(QuietButtonStyle())
+            }
+            Text("Accessibility lets Typer play keys. Input Monitoring is separate, optional, and only used during a Live capture session. All learned data stays on this Mac.")
                 .font(.system(size: 10)).foregroundStyle(TyperTheme.muted).lineSpacing(3)
 
             Rectangle().fill(TyperTheme.line).frame(height: 1).padding(.vertical, 2)

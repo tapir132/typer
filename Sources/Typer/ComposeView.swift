@@ -153,7 +153,7 @@ struct ComposeView: View {
             VStack(spacing: 5) {
                 compactToggle("Delayed repairs", note: "Notice errors a word or two later", binding: $model.settings.delayedRepairs)
                 compactToggle("Thought pauses", note: "Occasional 2–5 second stalls", binding: $model.settings.thoughtPauses)
-                compactToggle("Extended thought pauses", note: "Rare stalls can stretch up to 45 seconds", binding: $model.settings.extendedThoughtPauses)
+                compactToggle("Extended thought pauses", note: "2.5% per sentence end · 2–45 seconds", binding: $model.settings.extendedThoughtPauses)
                     .disabled(!model.settings.thoughtPauses)
                 compactToggle("Fatigue drift", note: "Cadence evolves over long runs", binding: $model.settings.fatigueDrift)
             }

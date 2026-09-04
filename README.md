@@ -26,7 +26,11 @@ The build script uses the local `Cadence Signing` identity when available so Acc
 4. During the five-second countdown, focus any editable field in another app.
 5. Press **⌘ Esc** at any time to stop immediately.
 
+While playback is running, Typer's own window shows the emergency hotkeys and a clickable **Stop typing** control. The overlay never covers the application receiving the text.
+
 Use **Train** in three ways: **Copy** learns exact errors and digraphs, **Freewrite** learns organic thought pauses, and **Sprint** learns fast bursts and recovery reflexes. The profiler measures dwell time, flight time, press-to-press digraph latency, timing variation, burst length, correction rate, detection delay, repair latency, and recurring substitutions. Profiles and samples stay in macOS user defaults on this Mac.
+
+**Live capture** is an optional fourth mode for learning while you write in Google Docs or another application. It uses a listen-only event tap, never intercepts or delays the target application's input, ignores protected Secure Input fields, stops automatically after 15 minutes, and discards raw keystrokes when the session ends. Only derived timing and correction statistics are saved. Live capture requires the separate macOS **Input Monitoring** permission and never starts without an explicit click.
 
 ### Mistakes and corrections during training
 
@@ -50,7 +54,7 @@ The approach is informed by the [CMU keystroke-dynamics benchmark](https://www.c
 - Some protected fields, remote desktops, games, or apps that intercept keyboard events may not accept simulated keystrokes.
 - The simulator always repairs generated mistakes so the final text matches the source.
 - Human variation changes dwell, flight, bursts, and pauses only. Mistake frequency independently controls how many errors are injected and repaired.
-- Extended thought pauses optionally allow rare sentence-level stalls up to 45 seconds; the emergency stop remains responsive during them.
+- Thought pauses have a 2.5% chance after each sentence ending. Normal pauses last 2–5 seconds; Extended thought pauses use a skewed 2–45-second range. Any selected pause is included in the displayed time estimate, and the emergency stop remains responsive during it.
 - Sparkle checks the stable GitHub release feed by default. The optional Edge channel follows successful builds from `main`; both feeds require a valid Ed25519 signature.
 
 ## Test

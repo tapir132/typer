@@ -115,6 +115,21 @@ enum TypingEngine {
                 lastMistakeIndex = nil
             }
         }
+        if detectionRuns.isEmpty && characters.allSatisfy({ $0.expected.isEmpty }) {
+            var backspaceRun = 0
+            for record in records {
+                if record.kind == .backspace {
+                    backspaceRun += 1
+                } else if backspaceRun > 0 {
+                    // Without a reference passage, a run of N backspaces is the
+                    // best privacy-preserving estimate that the typo was N-1
+                    // characters behind the cursor when it was noticed.
+                    detectionRuns.append(Double(max(0, backspaceRun - 1)))
+                    backspaceRun = 0
+                }
+            }
+            if backspaceRun > 0 { detectionRuns.append(Double(max(0, backspaceRun - 1))) }
+        }
 
         let baseInterval = median(intervals)
         let minutes = max(duration / 60_000, 1 / 60)
@@ -127,7 +142,7 @@ enum TypingEngine {
             dwellMAD: mad(dwells) > 0 ? mad(dwells) : 15,
             backspaceRate: Double(backspaces.count) / Double(max(1, records.count)),
             repairDelay: median(repairs) > 0 ? median(repairs) : 410,
-            detectionCharacters: median(detectionRuns) > 0 ? median(detectionRuns) : 1.4,
+            detectionCharacters: detectionRuns.isEmpty ? 1.4 : median(detectionRuns),
             burstLength: median(burstSizes) > 0 ? median(burstSizes) : 7,
             punctuationPause: median(punctuationPauses) > 0 ? median(punctuationPauses) : 760,
             wordPause: max(20, (median(wordPauses) > 0 ? median(wordPauses) : 246) - (baseInterval > 0 ? baseInterval : 188)),
