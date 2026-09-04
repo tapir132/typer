@@ -8,7 +8,7 @@ Typer is a fully native SwiftUI macOS app that performs pasted text with human c
 swift run Typer
 ```
 
-To build a normal, ad-hoc-signed `.app` bundle:
+To build a normal `.app` bundle:
 
 ```bash
 chmod +x scripts/build-app.sh
@@ -16,7 +16,7 @@ chmod +x scripts/build-app.sh
 open .build/Typer.app
 ```
 
-On first use, open Typer's settings and enable Accessibility permission in **System Settings → Privacy & Security → Accessibility**. If you run the app through Terminal during development, macOS may list Terminal as the process that needs permission.
+The build script uses the local `Cadence Signing` identity when available so Accessibility permission survives rebuilds; contributors without it receive an ad-hoc-signed build. On first use, open Typer's settings and enable Accessibility permission in **System Settings → Privacy & Security → Accessibility**.
 
 ## Workflow
 
@@ -39,6 +39,8 @@ The approach is informed by the [CMU keystroke-dynamics benchmark](https://www.c
 - Cross-application playback uses native Core Graphics keyboard events. There is no web view or browser runtime.
 - Some protected fields, remote desktops, games, or apps that intercept keyboard events may not accept simulated keystrokes.
 - The simulator always repairs generated mistakes so the final text matches the source.
+- Human variation changes dwell, flight, bursts, and pauses only. Mistake frequency independently controls how many errors are injected and repaired.
+- Sparkle checks the stable GitHub release feed by default. The optional Edge channel follows successful builds from `main`; both feeds require a valid Ed25519 signature.
 
 ## Test
 

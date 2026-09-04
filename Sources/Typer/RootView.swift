@@ -4,6 +4,7 @@ struct RootView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var controller: TypingController
     @ObservedObject private var profiles: ProfileStore
+    @ObservedObject private var updates = UpdateManager.shared
 
     init(model: AppModel) {
         self.model = model
@@ -38,6 +39,7 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.18), value: model.toast)
         .sheet(isPresented: $model.showsSystemSetup) { systemSetup }
+        .onAppear { updates.start() }
         .onChange(of: controller.state) { _, state in
             switch state {
             case .complete:
@@ -57,12 +59,6 @@ struct RootView: View {
             HStack(spacing: 10) {
                 RhythmMark()
                 Text("Typer").font(.system(size: 15, weight: .semibold))
-                Text("NATIVE BUILD")
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(TyperTheme.mutedStrong)
-                    .padding(.horizontal, 7).padding(.vertical, 4)
-                    .background(TyperTheme.raised)
-                    .clipShape(Capsule())
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -123,7 +119,7 @@ struct RootView: View {
     }
 
     private var systemSetup: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 20) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("System setup").font(.system(size: 20, weight: .semibold))
@@ -133,23 +129,72 @@ struct RootView: View {
                 Button("Done") { model.showsSystemSetup = false }.buttonStyle(QuietButtonStyle())
             }
             HStack(spacing: 12) {
-                Image(systemName: controller.accessibilityGranted ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                    .foregroundStyle(controller.accessibilityGranted ? TyperTheme.signal : TyperTheme.danger)
+                Image(systemName: model.accessibilityAuthorized ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
+                    .foregroundStyle(model.accessibilityAuthorized ? TyperTheme.signal : TyperTheme.danger)
                     .font(.system(size: 22))
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Accessibility permission").font(.system(size: 13, weight: .semibold))
-                    Text(controller.accessibilityGranted ? "Enabled" : "Required before the first run").font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
+                    Text(model.accessibilityAuthorized ? "Enabled" : "Required before the first run").font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
                 }
                 Spacer()
             }
             .padding(15).typerSurface(radius: 10)
-            Button("Open System Settings") { controller.openAccessibilitySettings() }.buttonStyle(SecondaryButtonStyle()).frame(maxWidth: .infinity)
+            HStack(spacing: 10) {
+                Button(model.accessibilityAuthorized ? "Permission enabled" : "Request permission") {
+                    model.requestAccessibilityPermission()
+                }
+                .buttonStyle(SecondaryButtonStyle())
+                .disabled(model.accessibilityAuthorized)
+                Button("Open System Settings") { controller.openAccessibilitySettings() }.buttonStyle(SecondaryButtonStyle())
+            }
+            .frame(maxWidth: .infinity)
             Text("In Privacy & Security → Accessibility, enable Typer. Your source text and learned profile stay on this Mac.")
                 .font(.system(size: 10)).foregroundStyle(TyperTheme.muted).lineSpacing(3)
+
+            Rectangle().fill(TyperTheme.line).frame(height: 1).padding(.vertical, 2)
+
+            Text("Updates").font(.system(size: 15, weight: .semibold))
+            Toggle(isOn: $updates.automaticallyChecks) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Check automatically").font(.system(size: 12, weight: .semibold))
+                    Text("Checks at launch and every six hours, then prompts for signed releases.").font(.system(size: 9)).foregroundStyle(TyperTheme.muted)
+                }
+            }
+            .toggleStyle(.switch).controlSize(.small).tint(TyperTheme.primary)
+
+            Toggle(isOn: $updates.automaticallyDownloads) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Install automatically").font(.system(size: 12, weight: .semibold))
+                    Text("Sparkle verifies the Ed25519 signature before replacing Typer.").font(.system(size: 9)).foregroundStyle(TyperTheme.muted)
+                }
+            }
+            .toggleStyle(.switch).controlSize(.small).tint(TyperTheme.primary).disabled(!updates.automaticallyChecks)
+
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Typer \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development")")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(updates.channel == .stable ? "Tested, versioned releases" : "Every successful main build")
+                        .font(.system(size: 9)).foregroundStyle(TyperTheme.muted)
+                }
+                Spacer()
+                Button("Check now") { updates.checkForUpdates() }.buttonStyle(SecondaryButtonStyle()).disabled(!updates.canCheckForUpdates)
+            }
+
+            Picker("Update channel", selection: $updates.channel) {
+                ForEach(UpdateChannel.allCases) { channel in Text(channel.title).tag(channel) }
+            }
+            .pickerStyle(.segmented).labelsHidden()
         }
         .padding(26)
-        .frame(width: 460)
+        .frame(width: 500)
         .background(TyperTheme.background)
+        .task {
+            while !Task.isCancelled {
+                model.refreshPermissions()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import Foundation
 
 @MainActor
@@ -9,31 +10,17 @@ final class TypingController: ObservableObject {
 
     private var countdownTask: Task<Void, Never>?
     private var workItem: DispatchWorkItem?
-    private var globalMonitor: Any?
-    private var localMonitor: Any?
 
     init() {
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53, event.modifierFlags.intersection([.command, .control]).isEmpty == false else { return }
-            Task { @MainActor in self?.stop() }
-        }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 53, event.modifierFlags.intersection([.command, .control]).isEmpty == false else { return event }
-            Task { @MainActor in self?.stop() }
-            return nil
-        }
-    }
-
-    deinit {
-        if let globalMonitor { NSEvent.removeMonitor(globalMonitor) }
-        if let localMonitor { NSEvent.removeMonitor(localMonitor) }
+        GlobalStopHotKey.shared.onTrigger = { [weak self] in self?.stop() }
+        GlobalStopHotKey.shared.register()
     }
 
     var accessibilityGranted: Bool { AXIsProcessTrusted() }
 
     @discardableResult
     func requestAccessibility() -> Bool {
-        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }
 
@@ -143,6 +130,55 @@ final class TypingController: ObservableObject {
     private nonisolated static func sleep(milliseconds: Double) {
         let microseconds = useconds_t(min(8_000_000, max(0, milliseconds * 1_000)))
         usleep(microseconds)
+    }
+}
+
+/// Carbon hot keys are handled by the window server, work before Accessibility
+/// is granted, and consume Escape so it does not leak into the target editor.
+@MainActor
+final class GlobalStopHotKey {
+    static let shared = GlobalStopHotKey()
+
+    var onTrigger: (() -> Void)?
+    private(set) var isRegistered = false
+    private var hotKeyRefs: [EventHotKeyRef] = []
+    private var handlerRef: EventHandlerRef?
+
+    func register() {
+        guard hotKeyRefs.isEmpty else { return }
+        installHandler()
+        let target = GetEventDispatcherTarget()
+        let bindings: [(modifiers: UInt32, id: UInt32)] = [
+            (UInt32(cmdKey), 1),
+            (UInt32(controlKey), 2)
+        ]
+        for binding in bindings {
+            var reference: EventHotKeyRef?
+            let identifier = EventHotKeyID(signature: 0x5459_5052, id: binding.id) // "TYPR"
+            let status = RegisterEventHotKey(
+                UInt32(kVK_Escape),
+                binding.modifiers,
+                identifier,
+                target,
+                0,
+                &reference
+            )
+            if status == noErr, let reference { hotKeyRefs.append(reference) }
+            else { NSLog("Typer could not register emergency stop hot key (OSStatus %d)", status) }
+        }
+        isRegistered = hotKeyRefs.count == bindings.count
+    }
+
+    private func installHandler() {
+        guard handlerRef == nil else { return }
+        var spec = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        InstallEventHandler(GetEventDispatcherTarget(), { _, _, _ in
+            MainActor.assumeIsolated { GlobalStopHotKey.shared.onTrigger?() }
+            return noErr
+        }, 1, &spec, nil, &handlerRef)
     }
 }
 

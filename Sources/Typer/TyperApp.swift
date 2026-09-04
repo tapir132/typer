@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct TyperApp: App {
     @StateObject private var model = AppModel()
+    private let updateManager = UpdateManager.shared
 
     var body: some Scene {
         WindowGroup {
@@ -13,6 +14,10 @@ struct TyperApp: App {
         .defaultSize(width: 1240, height: 800)
         .windowStyle(.hiddenTitleBar)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { updateManager.checkForUpdates() }
+                    .disabled(!updateManager.canCheckForUpdates)
+            }
             CommandMenu("Typing") {
                 Button("Arm Typing") { model.arm() }
                     .keyboardShortcut(.return, modifiers: .command)

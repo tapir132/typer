@@ -4,17 +4,24 @@
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleExecutable</key><string>Typer</string>
-  <key>CFBundleIdentifier</key><string>com.taperi132.typer</string>
+  <key>CFBundleIdentifier</key><string>com.tapir132.typer</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>Typer</string>
   <key>CFBundleDisplayName</key><string>Typer</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
-  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>SUAutomaticallyUpdate</key><false/>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUFeedURL</key><string>https://github.com/tapir132/typer/releases/latest/download/appcast.xml</string>
+  <key>SUPublicEDKey</key><string>MbuViPzNlqUnPLA5SV73R6uPaNJAO52RkJds5RqMSc0=</string>
+  <key>SURequireSignedFeed</key><true/>
+  <key>SUScheduledCheckInterval</key><integer>21600</integer>
+  <key>SUVerifyUpdateBeforeExtraction</key><true/>
 </dict>
 </plist>

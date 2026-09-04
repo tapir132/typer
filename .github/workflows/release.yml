@@ -1,0 +1,78 @@
+name: Release Typer
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version (for example, 1.1.0)
+        required: true
+        type: string
+      edge_commit:
+        description: Commit SHA of the tested Edge build
+        required: true
+        type: string
+      smoke_tested:
+        description: Confirm this Edge build passed a manual smoke test
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    env:
+      SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.edge_commit }}
+          fetch-depth: 0
+      - name: Test
+        run: swift test -Xswiftc -warnings-as-errors
+      - name: Validate candidate
+        env:
+          SMOKE_TESTED: ${{ inputs.smoke_tested }}
+        run: |
+          [[ "$SMOKE_TESTED" == "true" ]]
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD origin/main
+          short_sha="$(git rev-parse --short=7 HEAD)"
+          curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/edge/appcast.xml" | grep -Fq "edge.$short_sha"
+      - name: Configure release version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(git show -s --format=%ct HEAD)" Resources/Info.plist
+      - name: Import signing identity
+        env:
+          TYPER_SIGNING_P12: ${{ secrets.TYPER_SIGNING_P12 }}
+          TYPER_SIGNING_P12_PASSWORD: ${{ secrets.TYPER_SIGNING_P12_PASSWORD }}
+        run: ./scripts/import-signing-identity.sh
+      - name: Build Typer
+        env:
+          TYPER_DISTRIBUTION_BUILD: "1"
+        run: ./scripts/build-app.sh
+      - name: Create signed feed and disk image
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          mkdir -p release
+          ditto -c -k --sequesterRsrc --keepParent .build/Typer.app "release/Typer-$VERSION.zip"
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | \
+            .build/artifacts/sparkle/Sparkle/bin/generate_appcast \
+              --ed-key-file - \
+              --download-url-prefix "https://github.com/tapir132/typer/releases/download/v$VERSION/" \
+              --maximum-versions 1 --maximum-deltas 0 \
+              -o release/appcast.xml release
+          ./scripts/build-dmg.sh .build/Typer.app "release/Typer-$VERSION.dmg"
+          ./scripts/verify-dmg.sh "release/Typer-$VERSION.dmg"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: gh release create "v$VERSION" "release/Typer-$VERSION.zip" "release/Typer-$VERSION.dmg" release/appcast.xml --repo "$GITHUB_REPOSITORY" --title "Typer $VERSION" --generate-notes

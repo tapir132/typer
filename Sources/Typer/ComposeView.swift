@@ -91,7 +91,7 @@ struct ComposeView: View {
                 HStack {
                     Text("Rhythm preview").font(.system(size: 11, weight: .medium))
                     Spacer()
-                    Text("bursts · stalls · \(model.previewPlan.repairs) repair\(model.previewPlan.repairs == 1 ? "" : "s")")
+                    Text("timing only · \(model.previewPlan.repairs) repair\(model.previewPlan.repairs == 1 ? "" : "s") from Mistake frequency")
                         .font(.system(size: 9, design: .monospaced)).foregroundStyle(TyperTheme.muted)
                 }
                 RhythmWaveform(plan: model.previewPlan)

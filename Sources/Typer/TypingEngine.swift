@@ -128,7 +128,8 @@ enum TypingEngine {
         let learnedScale = base / max(40, profile.medianInterval)
         let jitter = profile.intervalMAD * learnedScale * (0.35 + realism * 0.95)
         let learnedError = profile.sampleCount > 0 ? min(0.055, max(0.004, profile.backspaceRate * 0.82)) : 0.018
-        let errorRate = settings.mistakeLevel == 0 ? 0 : learnedError * (0.38 + Double(settings.mistakeLevel) * 0.31) * (0.75 + realism * 0.35)
+        // Error frequency is its own control. Human variation only shapes timing.
+        let errorRate = settings.mistakeLevel == 0 ? 0 : learnedError * (0.38 + Double(settings.mistakeLevel) * 0.31)
 
         var events: [PlannedEvent] = []
         var repairs = 0
@@ -165,7 +166,9 @@ enum TypingEngine {
             }
             if settings.fatigueDrift && text.count > 250 { interval *= 1 + (Double(typedCharacters) / Double(text.count)) * 0.09 }
             interval *= 1 + 0.13 * exp(-Double(typedCharacters) / 11)
-            if unit() < 0.012 * realism { interval += 180 + unit() * 520 }
+            let microPauseRoll = unit()
+            let microPauseLength = unit()
+            if microPauseRoll < 0.012 * realism { interval += 180 + microPauseLength * 520 }
             return bounded(interval, 28, 8_000)
         }
 

@@ -1,4 +1,5 @@
 import Testing
+import AppKit
 import Foundation
 @testable import Typer
 
@@ -48,6 +49,54 @@ struct TypingEngineTests {
         #expect(sample.confusions["h"] == ["e"])
         #expect(sample.dwellMedian > 0)
         #expect(sample.medianInterval - sample.dwellMedian > 0)
+    }
+
+    @Test func humanVariationDoesNotChangeMistakeChoices() {
+        let text = "This longer paragraph contains enough ordinary words to produce several realistic corrections while timing changes independently."
+        var lowSettings = TypingSettings()
+        lowSettings.variation = 0
+        lowSettings.mistakeLevel = 4
+        var highSettings = lowSettings
+        highSettings.variation = 1
+        var lowRandom = TestGenerator(seed: 42)
+        var highRandom = TestGenerator(seed: 42)
+        let low = TypingEngine.generatePlan(text: text, settings: lowSettings, profile: .baseline(), using: &lowRandom)
+        let high = TypingEngine.generatePlan(text: text, settings: highSettings, profile: .baseline(), using: &highRandom)
+        #expect(low.repairs == high.repairs)
+        #expect(low.duration != high.duration)
+    }
+
+    @Test func updaterPromptGateWaitsForIdleSession() {
+        var gate = StartupUpdatePromptGate()
+        gate.queue()
+        let unavailable = gate.consumeIfReady(canCheck: false, sessionInProgress: false)
+        let busy = gate.consumeIfReady(canCheck: true, sessionInProgress: true)
+        let ready = gate.consumeIfReady(canCheck: true, sessionInProgress: false)
+        let consumed = gate.consumeIfReady(canCheck: true, sessionInProgress: false)
+        #expect(!unavailable)
+        #expect(!busy)
+        #expect(ready)
+        #expect(!consumed)
+    }
+
+    @Test func updateChannelsMatchReleasePolicy() {
+        #expect(UpdateChannel.stable.title == "Release")
+        #expect(UpdateChannel.edge.title == "Edge")
+    }
+
+    @MainActor
+    @Test func trainingEditorIsFocusableAndHasRealLayout() {
+        let editor = TrainingEditorFactory.make(
+            text: "",
+            placeholder: "Type here",
+            size: NSSize(width: 640, height: 220)
+        )
+        #expect(editor.isEditable)
+        #expect(editor.isSelectable)
+        #expect(editor.acceptsFirstResponder)
+        #expect(editor.frame.width == 640)
+        #expect(editor.frame.height == 220)
+        #expect(editor.textContainer?.widthTracksTextView == true)
     }
 
     private func apply(_ events: [PlannedEvent]) -> String {

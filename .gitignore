@@ -4,5 +4,6 @@ DerivedData/
 .DS_Store
 .playwright-cli/
 output/
+release/
 *.xcuserstate
 xcuserdata/

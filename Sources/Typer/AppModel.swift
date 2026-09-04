@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Foundation
 
 @MainActor
@@ -8,6 +9,7 @@ final class AppModel: ObservableObject {
     @Published var settings = TypingSettings()
     @Published var showsSystemSetup = false
     @Published var toast: String?
+    @Published private(set) var accessibilityAuthorized = false
 
     let profiles = ProfileStore()
     let controller = TypingController()
@@ -15,6 +17,7 @@ final class AppModel: ObservableObject {
     init() {
         if CommandLine.arguments.contains("--train") { section = .train }
         if CommandLine.arguments.contains("--profiles") { section = .profiles }
+        refreshPermissions()
     }
 
     func paste() {
@@ -24,12 +27,28 @@ final class AppModel: ObservableObject {
 
     func arm() {
         guard !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if !controller.accessibilityGranted {
+        refreshPermissions()
+        if !accessibilityAuthorized {
             showsSystemSetup = true
-            _ = controller.requestAccessibility()
+            requestAccessibilityPermission()
             return
         }
         controller.start(text: sourceText, settings: playbackSettings, profile: playbackProfile)
+    }
+
+    func requestAccessibilityPermission() {
+        // Match Dictation's documented trust prompt. Publishing the result after
+        // a short delay lets the setup sheet react without being reopened.
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+            self?.refreshPermissions()
+        }
+    }
+
+    func refreshPermissions() {
+        let trusted = AXIsProcessTrusted()
+        if trusted != accessibilityAuthorized { accessibilityAuthorized = trusted }
     }
 
     func showToast(_ message: String) {
@@ -41,8 +60,17 @@ final class AppModel: ObservableObject {
     }
 
     var previewPlan: TypingPlan {
-        var generator = SeededGenerator(seed: UInt64(abs(sourceText.hashValue &+ Int(settings.wpm * 10))))
+        // Timing controls intentionally do not change the preview's random typo
+        // choices. Variation changes cadence; Mistake frequency changes repairs.
+        let seedMaterial = "\(sourceText)|\(settings.mode.rawValue)|\(settings.mistakeLevel)|\(settings.delayedRepairs)|\(playbackProfile.id)"
+        var generator = SeededGenerator(seed: stableSeed(seedMaterial))
         return TypingEngine.generatePlan(text: sourceText, settings: playbackSettings, profile: playbackProfile, using: &generator)
+    }
+
+    private func stableSeed(_ value: String) -> UInt64 {
+        value.utf8.reduce(14_695_981_039_346_656_037) { hash, byte in
+            (hash ^ UInt64(byte)) &* 1_099_511_628_211
+        }
     }
 
     var playbackProfile: TypingProfile {

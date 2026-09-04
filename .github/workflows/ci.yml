@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test
+        run: swift test -Xswiftc -warnings-as-errors
+      - name: Build and verify app bundle
+        run: |
+          ./scripts/build-app.sh
+          plutil -lint .build/Typer.app/Contents/Info.plist
+          codesign --verify --deep --strict --verbose=2 .build/Typer.app
+          ./scripts/build-dmg.sh .build/Typer.app release/Typer.dmg
+          ./scripts/verify-dmg.sh release/Typer.dmg
