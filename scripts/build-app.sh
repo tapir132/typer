@@ -6,6 +6,7 @@ APP_BUNDLE="$PROJECT_ROOT/.build/Typer.app"
 CONTENTS="$APP_BUNDLE/Contents"
 
 cd "$PROJECT_ROOT"
+"$PROJECT_ROOT/scripts/generate-icon.sh" >/dev/null
 swift build -c release
 
 if [[ "$APP_BUNDLE" != "$PROJECT_ROOT/.build/Typer.app" ]]; then

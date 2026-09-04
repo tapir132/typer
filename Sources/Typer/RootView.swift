@@ -185,6 +185,14 @@ struct RootView: View {
                 ForEach(UpdateChannel.allCases) { channel in Text(channel.title).tag(channel) }
             }
             .pickerStyle(.segmented).labelsHidden()
+
+            if let updateError = updates.lastError {
+                Text("Last update error: \(updateError)")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundStyle(TyperTheme.danger)
+                    .textSelection(.enabled)
+                    .lineLimit(4)
+            }
         }
         .padding(26)
         .frame(width: 500)

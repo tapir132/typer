@@ -171,8 +171,8 @@ struct ComposeView: View {
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.state == .typing || controller.state == .preparing || isArmed)
 
-            Text("Switch apps during the five-second countdown. Stop anytime with ⌘ Esc or ⌃ Esc.")
-                .font(.system(size: 9)).foregroundStyle(TyperTheme.muted).multilineTextAlignment(.center).lineSpacing(2)
+            Text("After Arm: focus target  ·  Stop: ⌘ Esc / ⌃ Esc")
+                .font(.system(size: 8.5, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.muted).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity).padding(.top, 9)
         }
     }

@@ -37,6 +37,7 @@ final class UpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate {
     )
 
     @Published private(set) var canCheckForUpdates = false
+    @Published private(set) var lastError: String?
     @Published var channel: UpdateChannel = .stable {
         didSet {
             guard isConfigured else { return }
@@ -96,13 +97,21 @@ final class UpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate {
         controller.updater.checkForUpdateInformation()
     }
 
-    func checkForUpdates() { controller.checkForUpdates(nil) }
+    func checkForUpdates() {
+        lastError = nil
+        controller.checkForUpdates(nil)
+    }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         if startupProbeInProgress { startupProbeFoundUpdate = true }
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
+        if let error {
+            let detail = (error as NSError).debugDescription
+            lastError = detail
+            NSLog("Typer Sparkle update failed: %@", detail)
+        }
         guard startupProbeInProgress, updateCheck == .updateInformation else { return }
         let shouldPrompt = startupProbeFoundUpdate
         startupProbeInProgress = false

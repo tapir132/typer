@@ -19,7 +19,16 @@ NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
 NSColor.clear.setFill()
 NSRect(x: 0, y: 0, width: canvas, height: canvas).fill()
 
-let tile = NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: canvas, height: canvas), xRadius: 224, yRadius: 224)
+// macOS does not automatically add optical padding to a raw .icns. Keep the
+// tile inset so its Dock weight matches system and App Store applications.
+let inset: CGFloat = 88
+let scale = (CGFloat(canvas) - inset * 2) / CGFloat(canvas)
+func scaled(_ value: CGFloat) -> CGFloat { inset + value * scale }
+let tile = NSBezierPath(
+    roundedRect: NSRect(x: inset, y: inset, width: CGFloat(canvas) - inset * 2, height: CGFloat(canvas) - inset * 2),
+    xRadius: 224 * scale,
+    yRadius: 224 * scale
+)
 NSColor(red: 0.067, green: 0.067, blue: 0.094, alpha: 1).setFill()
 tile.fill()
 
@@ -31,9 +40,9 @@ func bar(x: CGFloat, y: CGFloat, width: CGFloat, height: CGFloat, color: NSColor
 
 let violet = NSColor(red: 0.35, green: 0.38, blue: 0.96, alpha: 1)
 let lime = NSColor(red: 0.65, green: 0.93, blue: 0.22, alpha: 1)
-bar(x: 224, y: 232, width: 144, height: 296, color: violet)
-bar(x: 440, y: 232, width: 144, height: 608, color: lime)
-bar(x: 656, y: 232, width: 144, height: 444, color: violet)
+bar(x: scaled(224), y: scaled(232), width: 144 * scale, height: 296 * scale, color: violet)
+bar(x: scaled(440), y: scaled(232), width: 144 * scale, height: 608 * scale, color: lime)
+bar(x: scaled(656), y: scaled(232), width: 144 * scale, height: 444 * scale, color: violet)
 NSGraphicsContext.restoreGraphicsState()
 
 guard let data = bitmap.representation(using: .png, properties: [:]) else { fatalError("Could not encode icon") }
