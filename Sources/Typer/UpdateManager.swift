@@ -52,10 +52,16 @@ final class UpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate {
 
     @Published private(set) var canCheckForUpdates = false
     @Published private(set) var lastError: String?
+    @Published private(set) var checkSummary = UpdateCheckSummary()
+    // Capture metadata at launch; rebuilding the .app on disk must not make an
+    // already-running process claim to be the replacement binary.
+    let build = AppBuildIdentity(info: Bundle.main.infoDictionary ?? [:])
     @Published var channel: UpdateChannel = .stable {
         didSet {
             guard isConfigured else { return }
             UserDefaults.standard.set(channel.rawValue, forKey: "updateChannel")
+            checkSummary = UpdateCheckSummary()
+            lastError = nil
             if hasStarted { controller.updater.resetUpdateCycleAfterShortDelay() }
         }
     }
@@ -112,15 +118,33 @@ final class UpdateManager: NSObject, ObservableObject, SPUUpdaterDelegate {
     }
 
     func checkForUpdates() {
+        guard canCheckForUpdates else { return }
         lastError = nil
+        checkSummary.begin()
         controller.checkForUpdates(nil)
     }
 
+    func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        lastError = nil
+        checkSummary.begin()
+    }
+
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        checkSummary.found(version: item.displayVersionString)
         if startupProbeInProgress { startupProbeFoundUpdate = true }
     }
 
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater, error: any Error) {
+        let error = error as NSError
+        if let item = error.userInfo[SPULatestAppcastItemFoundKey] as? SUAppcastItem {
+            checkSummary.publishedVersion = item.displayVersionString
+        }
+        let raw = (error.userInfo[SPUNoUpdateFoundReasonKey] as? NSNumber)?.int32Value
+        checkSummary.noUpdate(reason: raw.flatMap(SPUNoUpdateFoundReason.init(rawValue:)), channel: channel, localBuild: build.isLocal)
+    }
+
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: (any Error)?) {
+        checkSummary.finish(error: error as NSError?)
         if let error {
             let updateError = error as NSError
             if let detail = UpdateErrorPresentation.message(for: updateError) {

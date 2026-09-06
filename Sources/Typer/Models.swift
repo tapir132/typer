@@ -4,10 +4,11 @@ enum AppSection: String, CaseIterable, Identifiable {
     case compose = "Compose"
     case train = "Train"
     case profiles = "Profiles"
+    case guide = "Guide"
     var id: String { rawValue }
 }
 
-enum TrainingMode: String, CaseIterable, Identifiable {
+enum TrainingMode: String, Codable, CaseIterable, Identifiable {
     case copy = "Copy"
     case freewrite = "Freewrite"
     case sprint = "Sprint"
@@ -92,6 +93,12 @@ struct TypingProfile: Codable, Identifiable, Equatable {
     var digraphs: [String: [Double]]
     var confusions: [String: [String]]
     var createdAt: Date
+    // Optional additions preserve decoding of every v1 profile.
+    var evidence: TimingEvidence? = nil
+
+    var isLegacy: Bool {
+        id != Self.baselineID && sampleCount > 0 && evidence == nil
+    }
 
     static let baselineID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
 
@@ -125,6 +132,7 @@ struct TypingProfile: Codable, Identifiable, Equatable {
 enum PlannedEventKind: String, Codable {
     case character
     case backspace
+    case wordBackspace
     case arrowLeft
     case arrowRight
     case shiftArrowLeft
@@ -135,6 +143,7 @@ enum PlannedEventKind: String, Codable {
 struct PlannedEvent: Codable, Equatable {
     var kind: PlannedEventKind
     var value: String = ""
+    /// Signed prior-key-release to this key press, in milliseconds.
     var flight: Double
     var dwell: Double
 }
@@ -147,7 +156,7 @@ struct TypingPlan: Codable, Equatable {
 }
 
 struct TrainingKeyRecord: Codable, Equatable {
-    enum Kind: String, Codable { case character, backspace }
+    enum Kind: String, Codable { case character, backspace, wordDelete, selection, navigation, boundary }
     var id: UUID
     var kind: Kind
     var key: String
@@ -172,4 +181,11 @@ struct TrainingSample: Codable, Equatable {
     var wordPause: Double
     var digraphs: [String: [Double]]
     var confusions: [String: [String]]
+    var evidence: TimingEvidence? = nil
+    var mode: TrainingMode? = nil
+    var capturedAt: Date? = nil
+    // Only the built-in Copy/Sprint reference prompt, never captured Live text.
+    var referenceText: String? = nil
+
+    var isLegacy: Bool { evidence == nil || mode == nil }
 }

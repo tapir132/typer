@@ -25,6 +25,13 @@ sed 's/__VERSION__/1.0.0/g' "$PROJECT_ROOT/Resources/Info.plist" > "$CONTENTS/In
 if [[ "${TYPER_DISTRIBUTION_BUILD:-0}" != "1" ]]; then
   LOCAL_BUILD_NUMBER="$(date +%s)"
   LOCAL_REVISION="$(git -C "$PROJECT_ROOT" rev-parse --short=7 HEAD)"
+  LOCAL_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  LOCAL_HAS_CHANGES=false
+  if [[ -n "$(git -C "$PROJECT_ROOT" status --porcelain --untracked-files=normal -- Sources Resources scripts Package.swift Package.resolved)" ]]; then
+    LOCAL_HAS_CHANGES=true
+  fi
+  /usr/libexec/PlistBuddy -c "Add :TyperBuildDate string $LOCAL_BUILD_DATE" "$CONTENTS/Info.plist"
+  /usr/libexec/PlistBuddy -c "Add :TyperBuildHasLocalChanges bool $LOCAL_HAS_CHANGES" "$CONTENTS/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $LOCAL_BUILD_NUMBER" "$CONTENTS/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.0.0-local.$LOCAL_REVISION" "$CONTENTS/Info.plist"
 fi

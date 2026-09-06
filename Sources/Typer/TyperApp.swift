@@ -24,6 +24,10 @@ struct TyperApp: App {
                 Button("Stop Typing") { model.controller.stop() }
                     .keyboardShortcut(.escape, modifiers: .command)
             }
+            CommandGroup(replacing: .help) {
+                Button("Typer Guide") { model.showGuide(.firstRun) }
+                    .keyboardShortcut("?", modifiers: .command)
+            }
         }
     }
 }

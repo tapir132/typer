@@ -10,7 +10,8 @@ final class TypingController: ObservableObject {
 
     private var countdownTask: Task<Void, Never>?
     private var planningTask: Task<Void, Never>?
-    private var workItem: DispatchWorkItem?
+    private var playbackSession: PlaybackSession?
+    private let playbackQueue = DispatchQueue(label: "typer.playback", qos: .userInitiated)
 
     init() {
         GlobalStopHotKey.shared.onTrigger = { [weak self] in self?.stop() }
@@ -84,8 +85,8 @@ final class TypingController: ObservableObject {
         planningTask = nil
         countdownTask?.cancel()
         countdownTask = nil
-        workItem?.cancel()
-        workItem = nil
+        playbackSession?.cancel()
+        playbackSession = nil
         if resetState { state = .stopped }
     }
 
@@ -93,94 +94,37 @@ final class TypingController: ObservableObject {
 
     private func begin(_ plan: TypingPlan) {
         state = .typing
-        let item = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            let source = CGEventSource(stateID: .hidSystemState)
-            for event in plan.events {
-                guard self.workItem?.isCancelled == false else { return }
-                var remainingFlight = event.flight
-                while remainingFlight > 0 {
-                    guard self.workItem?.isCancelled == false else { return }
-                    let slice = min(50, remainingFlight)
-                    Self.sleep(milliseconds: slice)
-                    remainingFlight -= slice
+        let source = CGEventSource(stateID: .privateState)
+        let session = PlaybackSession { action in
+            guard let event = CGEvent(keyboardEventSource: source, virtualKey: action.code, keyDown: action.isDown) else { return false }
+            // Always set flags explicitly; CGEvent may otherwise inherit system state.
+            event.flags = []
+            if action.shift { event.flags.insert(.maskShift) }
+            if action.option { event.flags.insert(.maskAlternate) }
+            if !action.unicode.isEmpty {
+                let units = Array(action.unicode.utf16)
+                units.withUnsafeBufferPointer {
+                    event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
                 }
-                guard self.workItem?.isCancelled == false else { return }
-                Self.post(event, source: source)
             }
+            event.post(tap: .cghidEventTap)
+            return true
+        }
+        playbackSession = session
+        playbackQueue.async { [weak self] in
+            let outcome = session.run(plan: plan)
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.workItem?.isCancelled == false else { return }
-                self.workItem = nil
-                self.state = .complete
-            }
-        }
-        workItem = item
-        DispatchQueue.global(qos: .userInitiated).async(execute: item)
-    }
-
-    private nonisolated static func post(_ event: PlannedEvent, source: CGEventSource?) {
-        let key: (code: CGKeyCode, shift: Bool)?
-        switch event.kind {
-        case .backspace: key = (51, false)
-        case .arrowLeft: key = (123, false)
-        case .arrowRight: key = (124, false)
-        case .shiftArrowLeft: key = (123, true)
-        case .enter: key = (36, false)
-        case .tab: key = (48, false)
-        case .character: key = KeyboardMap.lookup(event.value)
-        }
-
-        if let key {
-            let shiftUp: CGEvent?
-            if key.shift {
-                let shiftDown = CGEvent(keyboardEventSource: source, virtualKey: 56, keyDown: true)
-                shiftDown?.flags = .maskShift
-                shiftDown?.post(tap: .cghidEventTap)
-                sleep(milliseconds: 18)
-                shiftUp = CGEvent(keyboardEventSource: source, virtualKey: 56, keyDown: false)
-            } else {
-                shiftUp = nil
-            }
-            defer {
-                if let shiftUp {
-                    sleep(milliseconds: 12)
-                    shiftUp.flags = []
-                    shiftUp.post(tap: .cghidEventTap)
+                guard let self, self.playbackSession === session else { return }
+                self.playbackSession = nil
+                switch outcome {
+                case .complete: self.state = .complete
+                case .cancelled: self.state = .stopped
+                case .failed: self.state = .error("A keyboard event could not be created. Playback stopped and held keys were released.")
                 }
             }
-
-            let down = CGEvent(keyboardEventSource: source, virtualKey: key.code, keyDown: true)
-            let up = CGEvent(keyboardEventSource: source, virtualKey: key.code, keyDown: false)
-            if key.shift {
-                down?.flags = .maskShift
-                up?.flags = .maskShift
-            }
-            down?.post(tap: .cghidEventTap)
-            sleep(milliseconds: event.dwell)
-            up?.post(tap: .cghidEventTap)
-        } else {
-            postUnicode(event.value, source: source, dwell: event.dwell)
         }
     }
 
-    private nonisolated static func postUnicode(_ string: String, source: CGEventSource?, dwell: Double) {
-        var units = Array(string.utf16)
-        guard !units.isEmpty else { return }
-        let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true)
-        let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
-        units.withUnsafeMutableBufferPointer { buffer in
-            down?.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
-            up?.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
-        }
-        down?.post(tap: .cghidEventTap)
-        sleep(milliseconds: dwell)
-        up?.post(tap: .cghidEventTap)
-    }
-
-    private nonisolated static func sleep(milliseconds: Double) {
-        let microseconds = useconds_t(min(8_000_000, max(0, milliseconds * 1_000)))
-        usleep(microseconds)
-    }
 }
 
 /// Carbon hot keys are handled by the window server, work before Accessibility
@@ -232,7 +176,7 @@ final class GlobalStopHotKey {
     }
 }
 
-private enum KeyboardMap {
+enum KeyboardMap {
     private static let base: [Character: CGKeyCode] = [
         "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9,
         "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17, "1": 18, "2": 19,
@@ -249,7 +193,7 @@ private enum KeyboardMap {
 
     static func lookup(_ string: String) -> (code: CGKeyCode, shift: Bool)? {
         guard string.count == 1, let character = string.first else { return nil }
-        let lower = Character(string.lowercased())
+        guard string.lowercased().count == 1, let lower = string.lowercased().first else { return nil }
         if let code = base[lower] { return (code, character.isUppercase) }
         if let plain = shifted[character], let code = base[plain] { return (code, true) }
         return nil

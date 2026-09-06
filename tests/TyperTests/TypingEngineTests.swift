@@ -22,7 +22,7 @@ struct TypingEngineTests {
                 settings.delayedRepairs = true
                 let plan = TypingEngine.generatePlan(text: input, settings: settings, profile: .baseline(wpm: 72), using: &random)
                 #expect(apply(plan.events) == input, "Failed seed \(seed)")
-                #expect(plan.events.allSatisfy { $0.flight >= 8 && $0.dwell >= 32 })
+                #expect(plan.events.allSatisfy { $0.flight.isFinite && $0.dwell >= 19.999 && $0.dwell <= 250.001 })
             }
         }
     }
@@ -183,7 +183,7 @@ struct TypingEngineTests {
         let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: .baseline(), using: &random)
         #expect(plan.events.contains { $0.flight > 8_000 })
         #expect(plan.events.allSatisfy { $0.flight <= 45_000 })
-        #expect(plan.duration == plan.events.reduce(0) { $0 + $1.flight + $1.dwell })
+        #expect(plan.duration == KeyTimeline.strokes(for: plan.events).map(\.releaseOffset).max())
         #expect(apply(plan.events) == text)
     }
 
@@ -204,7 +204,8 @@ struct TypingEngineTests {
         #expect(capture.characterCount == 40)
         #expect(capture.backspaceCount == 2)
         #expect(sample.dwellMedian == 72)
-        #expect(sample.detectionCharacters == 1)
+        #expect(sample.evidence?.detectionDistances.isEmpty == true)
+        #expect(sample.evidence?.deletionRuns == [2])
         #expect(sample.digraphs["th"]?.isEmpty == false)
     }
 
@@ -238,6 +239,9 @@ struct TypingEngineTests {
                 replaceSelectionIfNeeded()
             case .backspace where cursor > 0:
                 buffer.remove(at: cursor - 1); cursor -= 1
+            case .wordBackspace:
+                replaceSelectionIfNeeded()
+                while cursor > 0 && buffer[cursor - 1].isLetter { buffer.remove(at: cursor - 1); cursor -= 1 }
             case .arrowLeft:
                 selectionAnchor = nil; cursor = max(0, cursor - 1)
             case .arrowRight:

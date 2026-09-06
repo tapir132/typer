@@ -5,6 +5,7 @@ import Foundation
 @MainActor
 final class AppModel: ObservableObject {
     @Published var section: AppSection = .compose
+    @Published var guideTopic: GuideTopic = .firstRun
     @Published var sourceText = "Hey — quick update. I finished the first pass and pushed the changes. There are still a couple of rough edges, but the core flow is working really well now." {
         didSet { schedulePreviewRefresh() }
     }
@@ -18,14 +19,15 @@ final class AppModel: ObservableObject {
     @Published private(set) var inputMonitoringAuthorized = false
     @Published private(set) var previewPlan = TypingPlan(events: [], duration: 0, repairs: 0, effectiveWPM: 0)
 
-    let profiles = ProfileStore()
+    let profiles: ProfileStore
     let controller = TypingController()
     let liveCapture = GlobalTrainingCapture()
     private var previewTask: Task<Void, Never>?
     private var previewRevision = 0
     private var previewAppliedRevision = 0
 
-    init() {
+    init(profileStore: ProfileStore? = nil) {
+        profiles = profileStore ?? ProfileStore()
         if CommandLine.arguments.contains("--train") { section = .train }
         if CommandLine.arguments.contains("--profiles") { section = .profiles }
         if CommandLine.arguments.contains("--live-capture") {
@@ -40,6 +42,11 @@ final class AppModel: ObservableObject {
     func paste() {
         if let value = NSPasteboard.general.string(forType: .string) { sourceText = value }
         else { showToast("The clipboard does not contain text.") }
+    }
+
+    func showGuide(_ topic: GuideTopic) {
+        guideTopic = topic
+        section = .guide
     }
 
     func arm() {
@@ -138,7 +145,7 @@ final class AppModel: ObservableObject {
 
     var playbackProfile: TypingProfile {
         settings.mode == .personal
-            ? profiles.activeProfile.stabilized(wpm: settings.wpm)
+            ? profiles.activeProfile
             : .baseline(wpm: settings.wpm)
     }
 
@@ -158,8 +165,9 @@ final class AppModel: ObservableObject {
 
     var performanceSourceDetail: String {
         if isUsingLearnedProfile {
-            let count = profiles.activeProfile.sampleCount
-            return "My rhythm · \(count) sample\(count == 1 ? "" : "s") · research-stabilized"
+            let profile = profiles.activeProfile
+            let count = profile.sampleCount
+            return "\(profile.name) · \(count) sample\(count == 1 ? "" : "s") · \(profile.isLegacy ? "playback only" : "research-stabilized")"
         }
         switch settings.mode {
         case .personal: return "No saved samples yet—using the built-in model"

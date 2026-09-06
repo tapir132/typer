@@ -7,6 +7,7 @@ struct CapturedKey {
     var timestamp: Double
     var cursor: Int
     var isRepeat: Bool
+    var modifiers: NSEvent.ModifierFlags = []
 }
 
 struct TrackingTextView: NSViewRepresentable {
@@ -114,7 +115,8 @@ final class CapturingNSTextView: NSTextView {
             characters: event.characters ?? "",
             timestamp: event.timestamp * 1_000,
             cursor: selectedRange().location,
-            isRepeat: event.isARepeat
+            isRepeat: event.isARepeat,
+            modifiers: event.modifierFlags
         ))
         super.keyDown(with: event)
         needsDisplay = true
@@ -126,7 +128,8 @@ final class CapturingNSTextView: NSTextView {
             characters: event.characters ?? "",
             timestamp: event.timestamp * 1_000,
             cursor: selectedRange().location,
-            isRepeat: event.isARepeat
+            isRepeat: event.isARepeat,
+            modifiers: event.modifierFlags
         ))
         super.keyUp(with: event)
     }

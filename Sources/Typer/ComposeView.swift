@@ -37,6 +37,10 @@ struct ComposeView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Text("What should I type?").font(.system(size: 27, weight: .semibold)).tracking(-0.5)
                 Text("Paste the finished text. Typer will perform the messy middle.").font(.system(size: 13)).foregroundStyle(TyperTheme.mutedStrong)
+                Button { model.showGuide(.firstRun) } label: {
+                    Label("How to use Typer", systemImage: "questionmark.circle")
+                        .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
+                }.buttonStyle(.plain).padding(.top, 3)
             }
             Spacer()
             HStack(spacing: 10) {
@@ -107,13 +111,17 @@ struct ComposeView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Performance").font(.system(size: 12, weight: .semibold))
+                HelpTip(title: "Performance", text: "Choose a timing source, then adjust speed, variation, and corrections. Guide → Modes & controls explains how the settings work together.")
                 Spacer()
-                Text("\(humanScore)% human").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.signal)
+                Text("\(Int((model.settings.variation * 100).rounded()))% variation").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.signal)
             }
             .frame(height: 54)
 
             controlGroup {
-                Text("Mode").controlLabel()
+                HStack(spacing: 4) {
+                    Text("Mode").controlLabel()
+                    HelpTip(title: "Mode", text: "Natural uses the built-in model. Clean keeps varied timing but disables generated mistakes. My rhythm uses your active learned profile, or the baseline until you save a sample.")
+                }
                 Picker("Mode", selection: $model.settings.mode) {
                     ForEach(TypingSettings.Mode.allCases) { mode in Text(mode.rawValue).tag(mode) }
                 }
@@ -129,33 +137,39 @@ struct ComposeView: View {
                 }
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(model.isUsingLearnedProfile ? TyperTheme.signal : TyperTheme.mutedStrong)
+                if model.isUsingLearnedProfile && profiles.activeProfile.isLegacy {
+                    HStack(alignment: .top, spacing: 5) {
+                        Text("Legacy profile · playback only. New recordings train a separate My rhythm profile.")
+                            .controlNote().fixedSize(horizontal: false, vertical: true)
+                        HelpTip(title: "Legacy profile", text: QuickHelp.legacyProfile)
+                    }
+                }
             }
 
             controlGroup {
-                controlHeader("Typing speed", value: "\(Int(model.settings.wpm)) WPM")
+                controlHeader("Typing speed", value: "\(Int(model.settings.wpm)) WPM", help: QuickHelp.speed)
                 Slider(value: $model.settings.wpm, in: 20...150, step: 1).tint(TyperTheme.primary)
                 HStack { Text("20"); Spacer(); Text("150") }.rangeLabels()
             }
 
             controlGroup {
-                controlHeader("Human variation", value: "\(Int(model.settings.variation * 100))%")
+                controlHeader("Human variation", value: "\(Int(model.settings.variation * 100))%", help: QuickHelp.variation)
                 Slider(value: $model.settings.variation, in: 0...1, step: 0.01).tint(TyperTheme.primary)
                 Text("Shapes dwell, flight, bursts, and hesitation—not the final text.").controlNote()
             }
 
             controlGroup {
-                controlHeader("Mistake frequency", value: mistakeLabel)
+                controlHeader("Mistake frequency", value: mistakeLabel, help: QuickHelp.mistakes)
                 Slider(value: Binding(get: { Double(model.settings.mistakeLevel) }, set: { model.settings.mistakeLevel = Int($0) }), in: 0...5, step: 1)
                     .tint(TyperTheme.primary).disabled(model.settings.mode == .clean)
                 HStack { Text("Clean"); Spacer(); Text("Chaotic") }.rangeLabels()
             }
 
             VStack(spacing: 5) {
-                compactToggle("Delayed repairs", note: "Notice errors a word or two later", binding: $model.settings.delayedRepairs)
-                compactToggle("Thought pauses", note: "Occasional 2–5 second stalls", binding: $model.settings.thoughtPauses)
-                compactToggle("Extended thought pauses", note: "2.5% per sentence end · 2–45 seconds", binding: $model.settings.extendedThoughtPauses)
-                    .disabled(!model.settings.thoughtPauses)
-                compactToggle("Fatigue drift", note: "Cadence evolves over long runs", binding: $model.settings.fatigueDrift)
+                compactToggle("Delayed repairs", note: "Notice errors a word or two later", help: "Lets some generated errors remain for a few characters before Typer returns to correct them. This has no effect when generated mistakes are disabled.", binding: $model.settings.delayedRepairs)
+                compactToggle("Thought pauses", note: "Occasional 2–5 second stalls", help: "Adds occasional thinking pauses of about 2–5 seconds. Pauses are included in the estimate, and Stop remains available during them.", binding: $model.settings.thoughtPauses)
+                compactToggle("Extended thought pauses", note: "2.5% per sentence end · 2–45 seconds", help: "Allows a longer 2–45 second pause with a 2.5% chance at each eligible sentence ending. Requires Thought pauses; short text may not contain a long pause.", isEnabled: model.settings.thoughtPauses, binding: $model.settings.extendedThoughtPauses)
+                compactToggle("Fatigue drift", note: "Cadence evolves over long runs", help: "Gradually changes the cadence as a run progresses instead of maintaining one pace from start to finish. It does not change the intended final text.", binding: $model.settings.fatigueDrift)
             }
             .padding(.vertical, 10)
 
@@ -179,7 +193,6 @@ struct ComposeView: View {
 
     private var isArmed: Bool { if case .armed = controller.state { return true }; return false }
     private var mistakeLabel: String { ["None", "Light", "Natural", "Frequent", "Messy", "Chaotic"][model.settings.mistakeLevel] }
-    private var humanScore: Int { min(99, 72 + Int(model.settings.variation * 24) + min(3, model.playbackSettings.mistakeLevel) * 2) }
     private var modeDescription: String {
         switch model.settings.mode {
         case .personal: return profiles.profiles.isEmpty ? "Train a sample to unlock your personal fingerprint." : "Samples your measured timing and error signature."
@@ -194,19 +207,28 @@ struct ComposeView: View {
             .overlay(alignment: .bottom) { Rectangle().fill(TyperTheme.softLine).frame(height: 1) }
     }
 
-    private func controlHeader(_ title: String, value: String) -> some View {
-        HStack { Text(title).controlLabel(); Spacer(); Text(value).font(.system(size: 10, weight: .medium, design: .monospaced)) }
+    private func controlHeader(_ title: String, value: String, help: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title).controlLabel()
+            HelpTip(title: title, text: help)
+            Spacer()
+            Text(value).font(.system(size: 10, weight: .medium, design: .monospaced))
+        }
     }
 
-    private func compactToggle(_ title: String, note: String, binding: Binding<Bool>) -> some View {
+    private func compactToggle(_ title: String, note: String, help: String, isEnabled: Bool = true, binding: Binding<Bool>) -> some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 10, weight: .medium))
+                HStack(spacing: 4) {
+                    Text(title).font(.system(size: 10, weight: .medium))
+                    HelpTip(title: title, text: help)
+                }
                 Text(note).font(.system(size: 8.5)).foregroundStyle(TyperTheme.muted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Toggle("", isOn: binding)
+                .disabled(!isEnabled)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.mini)
