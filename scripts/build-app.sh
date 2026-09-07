@@ -20,15 +20,17 @@ cp "$PROJECT_ROOT/.build/release/Typer" "$CONTENTS/MacOS/Typer"
 cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
 sed 's/__VERSION__/1.0.0/g' "$PROJECT_ROOT/Resources/Info.plist" > "$CONTENTS/Info.plist"
 
-# Keep local builds newer than an existing published build. Distribution jobs
-# set their immutable version first and opt out of this local-only suffix.
+# Match Edge's commit timestamp for clean local builds so later commits remain
+# eligible updates. Protect uncommitted app changes with a current-time stamp.
+# Distribution jobs set their immutable version first and opt out of this block.
 if [[ "${TYPER_DISTRIBUTION_BUILD:-0}" != "1" ]]; then
-  LOCAL_BUILD_NUMBER="$(date +%s)"
+  LOCAL_BUILD_NUMBER="$(git -C "$PROJECT_ROOT" show -s --format=%ct HEAD)"
   LOCAL_REVISION="$(git -C "$PROJECT_ROOT" rev-parse --short=7 HEAD)"
   LOCAL_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   LOCAL_HAS_CHANGES=false
   if [[ -n "$(git -C "$PROJECT_ROOT" status --porcelain --untracked-files=normal -- Sources Resources scripts Package.swift Package.resolved)" ]]; then
     LOCAL_HAS_CHANGES=true
+    LOCAL_BUILD_NUMBER="$(date +%s)"
   fi
   /usr/libexec/PlistBuddy -c "Add :TyperBuildDate string $LOCAL_BUILD_DATE" "$CONTENTS/Info.plist"
   /usr/libexec/PlistBuddy -c "Add :TyperBuildHasLocalChanges bool $LOCAL_HAS_CHANGES" "$CONTENTS/Info.plist"

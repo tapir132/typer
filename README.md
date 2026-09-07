@@ -73,7 +73,9 @@ System setup shows the running build's origin and, for local builds, its build d
 
 Checking and downloading do not require a restart. Automatic checks continue every six hours while Typer is open, and **Check now** checks immediately. Installing new app code requires a relaunch; Sparkle's update prompt handles installation and relaunching. Save unfinished training and copy any source text you want to keep before installing.
 
-A local rebuild can retain the same `1.0.0-local.<commit>` label while containing new edits. Quit and reopen Typer after rebuilding to load those edits; save unfinished training and copy any source text you want to retain first. The updater uses the internal build number, so a fresh local build may be newer than the published Release or Edge build. Local changes become available through Edge only after they are pushed to `main` and the release workflow succeeds.
+A local rebuild can retain the same `1.0.0-local.<commit>` label while containing new edits. Quit and reopen Typer after rebuilding to load those edits; save unfinished training and copy any source text you want to retain first.
+
+Clean local builds use the HEAD commit timestamp as their internal build number, matching Edge for that commit. Rebuilding an older commit therefore still allows updates to newer Edge commits. Builds with uncommitted app source, resource, or build-file changes use the current time instead, protecting those edits from replacement by an older published build. The displayed build date always records when the local app was built. Distribution builds retain the version configured by the release workflow. Local changes become available through Edge only after they are pushed to `main` and the release workflow succeeds.
 
 ## Test
 
