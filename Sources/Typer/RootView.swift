@@ -61,6 +61,7 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.18), value: model.toast)
         .sheet(isPresented: $model.showsSystemSetup) { systemSetup }
+        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in model.showsSystemSetup = false }
         .onAppear { updates.start() }
         .onChange(of: controller.state) { _, state in
             switch state {

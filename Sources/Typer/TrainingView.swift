@@ -73,6 +73,7 @@ struct TrainingView: View {
             if newMode != .liveCapture { reset(changePassage: false) }
         }
         .sheet(isPresented: $showsTrainingGuide) { AppGuideSheet(model: model) }
+        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in showsTrainingGuide = false }
     }
 
     private var mode: TrainingMode { model.trainingMode }

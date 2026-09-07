@@ -55,6 +55,7 @@ struct ProfilesView: View {
             Spacer()
         }
         .sheet(isPresented: $showsValidation) { ValidationView(samples: profiles.samples.filter { !$0.isLegacy }) }
+        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in showsValidation = false }
         .padding(.horizontal, TyperLayout.workspaceHorizontalPadding)
         .padding(.top, TyperLayout.workspaceTopPadding)
         .padding(.bottom, TyperLayout.workspaceBottomPadding)
