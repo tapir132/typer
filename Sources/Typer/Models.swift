@@ -72,7 +72,38 @@ struct TypingSettings: Codable, Equatable {
     var delayedRepairs = true
     var thoughtPauses = true
     var extendedThoughtPauses = false
+    var sentencePauses = false
+    var sentencePauseMinimum = 2
+    var sentencePauseMaximum = 10
     var fatigueDrift = true
+
+    var sentencePauseSeconds: ClosedRange<Int> {
+        let first = min(60, max(1, sentencePauseMinimum))
+        let second = min(60, max(1, sentencePauseMaximum))
+        return min(first, second)...max(first, second)
+    }
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case mode, wpm, variation, mistakeLevel, delayedRepairs, thoughtPauses, extendedThoughtPauses
+        case sentencePauses, sentencePauseMinimum, sentencePauseMaximum, fatigueDrift
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        mode = try values.decodeIfPresent(Mode.self, forKey: .mode) ?? .natural
+        wpm = try values.decodeIfPresent(Double.self, forKey: .wpm) ?? 64
+        variation = try values.decodeIfPresent(Double.self, forKey: .variation) ?? 0.78
+        mistakeLevel = try values.decodeIfPresent(Int.self, forKey: .mistakeLevel) ?? 2
+        delayedRepairs = try values.decodeIfPresent(Bool.self, forKey: .delayedRepairs) ?? true
+        thoughtPauses = try values.decodeIfPresent(Bool.self, forKey: .thoughtPauses) ?? true
+        extendedThoughtPauses = try values.decodeIfPresent(Bool.self, forKey: .extendedThoughtPauses) ?? false
+        sentencePauses = try values.decodeIfPresent(Bool.self, forKey: .sentencePauses) ?? false
+        sentencePauseMinimum = try values.decodeIfPresent(Int.self, forKey: .sentencePauseMinimum) ?? 2
+        sentencePauseMaximum = try values.decodeIfPresent(Int.self, forKey: .sentencePauseMaximum) ?? 10
+        fatigueDrift = try values.decodeIfPresent(Bool.self, forKey: .fatigueDrift) ?? true
+    }
 }
 
 struct TypingProfile: Codable, Identifiable, Equatable {

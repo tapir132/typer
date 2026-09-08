@@ -67,6 +67,7 @@ The report provides median/MAD, KS and Wasserstein distances, rollover, autocorr
 - The simulator plans repairs that restore the source text. The destination app's editing behavior, autocorrect, and keyboard handling can affect the delivered result.
 - Human variation changes dwell, flight, bursts, and pauses only. Mistake frequency independently controls how many errors are injected and repaired.
 - Thought pauses have a 2.5% chance after each sentence ending. Normal pauses last 2–5 seconds; Extended thought pauses use a skewed 2–45-second range. Any selected pause is included in the displayed time estimate, and the emergency stop remains responsive during it.
+- **Sentence pauses** is a separate, optional Compose control. It waits after every detected sentence when more text follows, with a default random range of 2–10 seconds. Min and Max can each be set from 1–60 seconds; equal values give a fixed pause. It works with Thought pauses off and in Clean mode. At the same boundary, the longer of an existing pause and the sentence pause wins. Closing quotes and punctuation clusters stay together, and no extra wait is added at the end of the text. Detection uses Apple's [sentence tokenizer](https://developer.apple.com/documentation/naturallanguage/nltokenizer); unusual abbreviations and formatting can still be ambiguous.
 - Sparkle checks the stable GitHub release feed by default. The optional Edge channel follows successful builds from `main`; both feeds require a valid Ed25519 signature.
 
 ### Local builds and update results

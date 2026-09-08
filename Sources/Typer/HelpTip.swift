@@ -33,6 +33,7 @@ struct HelpTip: View {
 }
 
 enum QuickHelp {
+    static let sentencePauses = "Pauses once after each detected sentence when more text follows. Defaults to a random 2–10 seconds; adjust Min and Max from 1–60 seconds, or set them equal for a fixed pause. Works independently of Thought pauses, including in Clean mode. If another pause occurs at the same point, the longer wait wins. Closing quotes and punctuation clusters stay together. Sentence detection can be imperfect for unusual abbreviations or formatting. The estimate includes these pauses, and Stop works throughout."
     static let legacyProfile = "Available for playback, with its saved timing and correction habits. This Legacy profile cannot accept new samples or use the new validation system. New recordings train a separate My rhythm profile and leave this one unchanged."
     static let speed = "Target words per minute, using five characters per word. Pauses and repairs add time, so the finished run can average a slower pace."
     static let measuredSpeed = "Estimated pace of the recorded sample, expressed as five-character words per minute. Pauses and editing affect the measured pace."

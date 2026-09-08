@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 
 extension TypingProfile {
     /// Keeps short or noisy training sessions from overpowering the baseline.
@@ -259,10 +260,14 @@ enum TypingEngine {
             previousCharacter = "" // Corrections are not ordinary motor digraphs.
         }
 
-        let tokens = tokenize(text)
+        let tokens = tokenize(text, sentencePauses: settings.sentencePauses)
+        var sentencePauseEvents: [Int] = []
         var tokenIndex = 0
         while tokenIndex < tokens.count {
-            let token = tokens[tokenIndex]
+            if tokenIndex > 0 && tokens[tokenIndex - 1].endsSentence {
+                sentencePauseEvents.append(events.count)
+            }
+            let token = tokens[tokenIndex].text
             guard token.rangeOfCharacter(from: .letters) != nil, token.count >= 3 else {
                 token.forEach { appendCharacter(String($0)) }
                 tokenIndex += 1
@@ -281,7 +286,7 @@ enum TypingEngine {
             if let confused = commonConfusions[lower], unit() < 0.22 {
                 let wrong = token.first?.isUppercase == true ? confused.prefix(1).uppercased() + confused.dropFirst() : confused
                 wrong.forEach { appendCharacter(String($0)) }
-                let canDelay = settings.delayedRepairs && tokenIndex + 2 < tokens.count && tokens[tokenIndex + 1].allSatisfy { $0 == " " } && unit() < 0.46
+                let canDelay = settings.delayedRepairs && tokenIndex + 2 < tokens.count && tokens[tokenIndex + 1].text.allSatisfy { $0 == " " } && unit() < 0.46
                 let editCounts = evidence?.editCounts ?? [:]
                 let editTotal = Double(editCounts.values.reduce(0, +))
                 let editWeight = min(0.75, editTotal / (editTotal + 24))
@@ -299,7 +304,7 @@ enum TypingEngine {
                     }
                 }
                 if canDelay {
-                    let carried = tokens[tokenIndex + 1] + tokens[tokenIndex + 2]
+                    let carried = tokens[tokenIndex + 1].text + tokens[tokenIndex + 2].text
                     carried.forEach { appendCharacter(String($0)) }
                     for move in 0..<carried.count { appendKey(.arrowLeft, delay: move == 0 ? profile.repairDelay * (1.1 + unit()) : 30 + unit() * 24) }
                     eraseWrong()
@@ -380,6 +385,13 @@ enum TypingEngine {
             tokenIndex += 1
         }
 
+        // Draw after typing/repair choices so changing the range cannot change
+        // those choices. Wait after key release, independently of WPM and jitter.
+        let pauseRange = settings.sentencePauseSeconds
+        for index in sentencePauseEvents where events.indices.contains(index) {
+            let seconds = Double(pauseRange.lowerBound) + unit() * Double(pauseRange.upperBound - pauseRange.lowerBound)
+            events[index].flight = max(events[index].flight, seconds * 1_000)
+        }
         let timeline = KeyTimeline.normalized(events)
         events = timeline.events
         let duration = timeline.duration
@@ -392,12 +404,54 @@ enum TypingEngine {
         return generatePlan(text: text, settings: settings, profile: profile, using: &generator)
     }
 
-    private static func tokenize(_ text: String) -> [String] {
-        guard let expression = try? NSRegularExpression(pattern: "\\s+|\\S+") else { return [text] }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return expression.matches(in: text, range: range).compactMap { match in
-            Range(match.range, in: text).map { String(text[$0]) }
+    private struct SourceToken {
+        var text: String
+        var endsSentence: Bool
+    }
+
+    private static func tokenize(_ text: String, sentencePauses: Bool) -> [SourceToken] {
+        guard let expression = try? NSRegularExpression(pattern: "\\s+|\\S+") else {
+            return [SourceToken(text: text, endsSentence: false)]
         }
+        var endings: [String.Index] = []
+        if sentencePauses, let lastContent = text.lastIndex(where: { !$0.isWhitespace }) {
+            let tokenizer = NLTokenizer(unit: .sentence)
+            tokenizer.string = text
+            let terminators: Set<Character> = [".", "!", "?", "。", "！", "？", "…"]
+            let closers: Set<Character> = ["\"", "'", "”", "’", "»", ")", "]", "}", "」", "』", "】"]
+            tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+                var end = range.upperBound
+                while end > range.lowerBound && text[text.index(before: end)].isWhitespace { end = text.index(before: end) }
+                var punctuation = end
+                while punctuation > range.lowerBound && closers.contains(text[text.index(before: punctuation)]) {
+                    punctuation = text.index(before: punctuation)
+                }
+                if punctuation > range.lowerBound, end <= lastContent,
+                   terminators.contains(text[text.index(before: punctuation)]) {
+                    endings.append(end)
+                }
+                return true
+            }
+        }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        var result: [SourceToken] = []
+        var endingIndex = 0
+        for match in expression.matches(in: text, range: range) {
+            guard let range = Range(match.range, in: text) else { continue }
+            var start = range.lowerBound
+            while endingIndex < endings.count && endings[endingIndex] <= range.upperBound {
+                let end = endings[endingIndex]
+                if end > start {
+                    result.append(SourceToken(text: String(text[start..<end]), endsSentence: true))
+                    start = end
+                }
+                endingIndex += 1
+            }
+            if start < range.upperBound {
+                result.append(SourceToken(text: String(text[start..<range.upperBound]), endsSentence: false))
+            }
+        }
+        return result
     }
 
 }

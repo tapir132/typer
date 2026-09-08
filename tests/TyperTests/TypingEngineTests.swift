@@ -122,6 +122,7 @@ struct TypingEngineTests {
         let text = String(repeating: "A realistic paragraph has words, punctuation, and pauses. ", count: 1_200)
         var settings = TypingSettings()
         settings.mistakeLevel = 3
+        settings.sentencePauses = true
         var random = TestGenerator(seed: 99)
         let clock = ContinuousClock()
         let elapsed = clock.measure {

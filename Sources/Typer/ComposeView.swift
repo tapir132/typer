@@ -169,6 +169,27 @@ struct ComposeView: View {
                 compactToggle("Delayed repairs", note: "Notice errors a word or two later", help: "Lets some generated errors remain for a few characters before Typer returns to correct them. This has no effect when generated mistakes are disabled.", binding: $model.settings.delayedRepairs)
                 compactToggle("Thought pauses", note: "Occasional 2–5 second stalls", help: "Adds occasional thinking pauses of about 2–5 seconds. Pauses are included in the estimate, and Stop remains available during them.", binding: $model.settings.thoughtPauses)
                 compactToggle("Extended thought pauses", note: "2.5% per sentence end · 2–45 seconds", help: "Allows a longer 2–45 second pause with a 2.5% chance at each eligible sentence ending. Requires Thought pauses; short text may not contain a long pause.", isEnabled: model.settings.thoughtPauses, binding: $model.settings.extendedThoughtPauses)
+                compactToggle("Sentence pauses", note: "\(model.settings.sentencePauseMinimum)–\(model.settings.sentencePauseMaximum) seconds · every sentence", help: QuickHelp.sentencePauses, binding: $model.settings.sentencePauses)
+                if model.settings.sentencePauses {
+                    HStack(spacing: 18) {
+                        Stepper("Min \(model.settings.sentencePauseMinimum) s", value: Binding(get: {
+                            model.settings.sentencePauseMinimum
+                        }, set: {
+                            model.settings.sentencePauseMinimum = $0
+                            model.settings.sentencePauseMaximum = max($0, model.settings.sentencePauseMaximum)
+                        }), in: 1...60)
+                        .accessibilityLabel("Minimum sentence pause, seconds")
+                        Stepper("Max \(model.settings.sentencePauseMaximum) s", value: Binding(get: {
+                            model.settings.sentencePauseMaximum
+                        }, set: {
+                            model.settings.sentencePauseMaximum = $0
+                            model.settings.sentencePauseMinimum = min($0, model.settings.sentencePauseMinimum)
+                        }), in: 1...60)
+                        .accessibilityLabel("Maximum sentence pause, seconds")
+                    }
+                    .font(.system(size: 10)).controlSize(.mini)
+                    .padding(.top, 2).padding(.bottom, 7)
+                }
                 compactToggle("Fatigue drift", note: "Cadence evolves over long runs", help: "Gradually changes the cadence as a run progresses instead of maintaining one pace from start to finish. It does not change the intended final text.", binding: $model.settings.fatigueDrift)
             }
             .padding(.vertical, 10)

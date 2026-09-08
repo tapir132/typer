@@ -65,6 +65,10 @@ struct WorkspaceLayoutTests {
             #expect(Set(headerBottoms).count == 1, "Header moved at \(size): \(headerBottoms)")
         }
         if ProcessInfo.processInfo.environment["TYPER_LAYOUT_SNAPSHOTS"] != nil {
+            model.settings.sentencePauses = true
+            model.section = .compose
+            try await snapshot(RootView(model: model), name: "SentencePauses", size: NSSize(width: 1240, height: 900))
+            model.settings.sentencePauses = false
             try await snapshot(RootView(model: model).systemSetup, name: "SystemSetup", size: NSSize(width: 500, height: 780))
             try await snapshot(PlaybackCheckView(), name: "PlaybackCheck-Ready", size: NSSize(width: 820, height: 730))
             var completed = freshSample
