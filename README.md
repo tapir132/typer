@@ -54,9 +54,11 @@ The approach is informed by the [CMU keystroke-dynamics benchmark](https://www.c
 
 ## Validate the model
 
-Open **Profiles → Validate rhythm** after saving four new sessions in the same mode. Two later sessions are held out; earlier sessions alone train My rhythm. The report compares Natural and My rhythm with the held-out traces using the same WPM and seeds, and includes a human-to-human comparison. Copy uses its built-in reference passage; Live and Freewrite comparisons are explicitly labeled as unmatched text.
+Open **Profiles → Validate rhythm** after saving four current sessions in the same mode. Choose a training context to see its ready count. Two later sessions are held out; earlier sessions alone train the temporary comparison profile. Overview compares Natural and My rhythm across paired trials using the same WPM and seeds, and includes a human-to-human reference. Detailed trials retains every comparison and observation count. Copy/Sprint text is only labeled matched when exact passage completion was recorded; partial or older unverified samples remain usable with that limitation. Live and Freewrite comparisons are unmatched.
 
-The report provides median/MAD, KS and Wasserstein distances, rollover, autocorrelation, repair measures and sample counts. It exports as JSON. There is no “human percentage”: the Compose percentage now describes the variation setting. See [validation definitions and limitations](docs/VALIDATION.md). Tests establish internal correctness; fresh human traces and a dedicated playback receiver are still needed before claiming measured human realism.
+The report provides median/MAD, KS and Wasserstein distances, rollover, autocorrelation, repair measures and sample counts. It exports as JSON. There is no “human percentage”: the Compose percentage now describes the variation setting. See [validation definitions and limitations](docs/VALIDATION.md). Tests establish internal correctness; fresh human traces are still needed before claiming measured human realism, and external-app delivery needs separate verification.
+
+**Profiles → Check playback on this Mac** runs built-in overlap, correction and Unicode scenarios in a dedicated AppKit editor. It uses the production scheduler and event creation, with delivery addressed only to Typer's process. Results check text, missing/duplicate events, event order and modifier flags, and report receipt-time errors separately from event timestamps. Results stay in memory unless exported. This checks the local receiver; it does not certify external apps or physical keyboard latency. See the [follow-up research and priorities](docs/research/2026-09-07-follow-up.md).
 
 ## Notes
 

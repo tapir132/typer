@@ -1,10 +1,12 @@
 # Local realism validation
 
-Open **Profiles → Validate rhythm**. Save at least four new sessions in the same training mode first. Copy is the best starting point: its built-in reference passage is available for matched-text generation. Live and Freewrite retain no source document; comparisons use a standard passage and are labeled as unmatched text.
+Open **Profiles → Validate rhythm**. Select the training context; its ready count requires at least 20 paired timings per current session. Four sessions enable a comparison. Copy/Sprint comparisons are matched only when the final editor text was verified against the full prompt at capture. Partial and older unverified samples still work, with unmatched/unverified labels. This optional completion field does not make current samples Legacy. Live and Freewrite retain no source document; comparisons use a standard passage and are labeled as unmatched text.
 
 The latest two eligible sessions are held out together. Only earlier sessions (up to five) fit the personal model. Natural and My rhythm use identical target WPM and seeds 17, 41 and 89. The report also compares the two human sessions with each other. This is a descriptive diagnostic, not a classifier or a probability that a trace is human.
 
-Use **Export report…** for a reproducible JSON result containing model version, training/held-out session indices, seeds, WPM, context, matched-text status, distances, medians, median absolute deviations, counts and limitations. It contains no captured document text. The full calculations are in `Sources/Typer/TypingValidation.swift`; run their deterministic fixtures with:
+The default overview reports median W1 distances and their minimum–maximum range across paired trials. A pair must share held-out session, training session indices, seed, WPM and matched-text status. Both modes need an available distance for the metric; unavailable data stay unavailable. Different seeds share the same human observations and are not independent human replicates. The human-to-human reference can include different passages and is not a pass threshold.
+
+Use **Export report…** for a reproducible version-2 JSON result containing model version, training/held-out session indices, seeds, WPM, context, matched-text status, distances, medians, median absolute deviations, counts and limitations. It contains no captured document text. The full calculations are in `Sources/Typer/TypingValidation.swift`; run their deterministic fixtures with:
 
 ```sh
 swift test -Xswiftc -warnings-as-errors
@@ -40,3 +42,16 @@ Plans retain the old flight/dwell JSON representation, now with signed flights. 
 The 500-seed/text combinations in the original text-equivalence regression exercise corrections in an abstract editor. New tests cover the scheduler and output ledger. These establish internal correctness. They do not prove all apps honor simulated key events, US-keyboard mappings, Unicode, arrow navigation or Option-Backspace identically. Realized OS event timing and external editor text should be checked in a dedicated receiver before making playback fidelity claims.
 
 No public research dataset is bundled. Aalto and the Mendeley human/synthetic benchmark have noncommercial data terms. The latter's `FT` column is DD and uses `-1` for missing/censored values; it cannot be imported as signed flight without conversion.
+
+
+## Actual local playback check
+
+Open **Profiles → Check playback on this Mac**. The three fixed scenarios exercise rollover and repeated keys, Shift transitions, character and word deletion, selection replacement, cursor insertion, punctuation, Return, Tab and Unicode. They use the same scheduler and Core Graphics event factory as Compose. The transport addresses only Typer's own process, and an application-lifetime router consumes tagged diagnostic events so queued keys cannot leak into another Typer field after cancellation. The dedicated receiver uses normal AppKit text interpretation with automatic substitutions disabled.
+
+The run checks byte-exact UTF-8 text, expected key-down/up receipts, duplicates, unexpected keys, ordering and Shift/Option flags. Complete neighboring character pairs supply planned and observed rollover. Modifier events are excluded from the stroke counts. Cancellation, physical key input, loss of application focus or loss of the test editor end the run. A 750 ms drain window allows final receipts after scheduling completes; a later event is treated as missing from that run.
+
+Per-event observations retain the NSEvent timestamp and the handler's monotonic receipt time, both relative to the scheduler origin. Median and nearest-rank p95 absolute errors compare planned and received hold, press interval and signed flight. Separate rows show receipt-vs-schedule error and receipt-vs-event-timestamp delay. Invalid nonfinite measurements increment the unexpected count and are excluded from exported receipts.
+
+No timing threshold is certified. Passing text/event integrity can coexist with poor timing: a stalled receiver can handle a batch with accurate original timestamps. The deterministic regression explicitly exercises this distinction. This does not measure a physical keyboard, the global HID delivery route, or another editor's behavior. No newly captured human evidence is claimed.
+
+For a graphical integration check, run `scripts/verify-playback.sh`. It builds a temporary application from the production scheduler, event factory and receiver sources, then runs a normal AppKit event loop. Generated events address only that test process. JSON reports and screenshots are saved under `output/playback-check-qa`; the temporary app is removed afterward. This requires a logged-in graphical session, Typer's normal signing identity and its existing Accessibility grant. The harness uses an isolated background receiver so it does not take focus from other work. The normal in-app check still requires foreground focus; the background harness does not test that policy. It never edits permissions or loads the user's profiles or live-capture state. Regular CI exercises the deterministic analysis and output-ledger tests without requiring this GUI check.

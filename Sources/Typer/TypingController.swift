@@ -96,17 +96,7 @@ final class TypingController: ObservableObject {
         state = .typing
         let source = CGEventSource(stateID: .privateState)
         let session = PlaybackSession { action in
-            guard let event = CGEvent(keyboardEventSource: source, virtualKey: action.code, keyDown: action.isDown) else { return false }
-            // Always set flags explicitly; CGEvent may otherwise inherit system state.
-            event.flags = []
-            if action.shift { event.flags.insert(.maskShift) }
-            if action.option { event.flags.insert(.maskAlternate) }
-            if !action.unicode.isEmpty {
-                let units = Array(action.unicode.utf16)
-                units.withUnsafeBufferPointer {
-                    event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
-                }
-            }
+            guard let event = KeyboardEventPoster.make(action, source: source) else { return false }
             event.post(tap: .cghidEventTap)
             return true
         }
@@ -125,6 +115,25 @@ final class TypingController: ObservableObject {
         }
     }
 
+}
+
+/// The diagnostic receiver and cross-app playback share the same event creation.
+/// Only the destination differs: the diagnostic posts to Typer's process alone.
+enum KeyboardEventPoster {
+    static func make(_ action: PhysicalKeyAction, source: CGEventSource?, marker: Int64 = 0) -> CGEvent? {
+        guard let event = CGEvent(keyboardEventSource: source, virtualKey: action.code, keyDown: action.isDown) else { return nil }
+        event.flags = []
+        if action.shift { event.flags.insert(.maskShift) }
+        if action.option { event.flags.insert(.maskAlternate) }
+        if !action.unicode.isEmpty {
+            let units = Array(action.unicode.utf16)
+            units.withUnsafeBufferPointer {
+                event.keyboardSetUnicodeString(stringLength: $0.count, unicodeString: $0.baseAddress)
+            }
+        }
+        event.setIntegerValueField(.eventSourceUserData, value: marker)
+        return event
+    }
 }
 
 /// Carbon hot keys are handled by the window server, work before Accessibility

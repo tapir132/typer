@@ -66,6 +66,11 @@ struct WorkspaceLayoutTests {
         }
         if ProcessInfo.processInfo.environment["TYPER_LAYOUT_SNAPSHOTS"] != nil {
             try await snapshot(RootView(model: model).systemSetup, name: "SystemSetup", size: NSSize(width: 500, height: 780))
+            try await snapshot(PlaybackCheckView(), name: "PlaybackCheck-Ready", size: NSSize(width: 820, height: 730))
+            var completed = freshSample
+            completed.referenceCompleted = true
+            try await snapshot(ValidationView(samples: Array(repeating: completed, count: 4)), name: "Validation-Overview", size: NSSize(width: 900, height: 690))
+            try await snapshot(ValidationView(samples: [freshSample]), name: "Validation-Readiness", size: NSSize(width: 900, height: 690))
             for topic in GuideTopic.allCases {
                 model.guideTopic = topic
                 try await snapshot(AppGuideView(model: model), name: "Guide-\(topic.rawValue)", size: NSSize(width: 920, height: 1600))

@@ -264,7 +264,7 @@ struct TrainingView: View {
     private var sample: TrainingSample? {
         if mode == .liveCapture { return liveCapture.previewSample }
         guard records.filter({ $0.kind == .character }).count >= 2 else { return nil }
-        return TypingEngine.summarize(records: records, target: target, duration: elapsed, mode: mode)
+        return TypingEngine.summarize(records: records, target: target, duration: elapsed, mode: mode, completedText: input)
     }
 
     private var fingerprintStatus: String {
@@ -299,7 +299,12 @@ struct TrainingView: View {
     private var canSave: Bool { records.count >= 35 && progress >= (mode == .freewrite ? 0.65 : 0.6) }
     private var feedback: String {
         if records.isEmpty { return "Waiting for your first keystroke" }
-        if canSave { return "Good sample—save this fingerprint." }
+        if canSave {
+            if (mode == .copy || mode == .sprint) && Array(input.utf8) != Array(prompt.utf8) {
+                return "Ready to save. Finish the passage exactly for matched-text validation."
+            }
+            return "Ready to save this sample."
+        }
         return "\(Int((progress * 100).rounded()))% captured"
     }
 

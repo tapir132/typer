@@ -73,6 +73,7 @@ struct TimingEvidence: Codable, Equatable {
             guard delta.isFinite, delta >= 15, delta <= 60_000 else {
                 evidence.excludedTransitionCount += 1
                 previousInterval = nil
+                if burst > 0 { bursts.append(Double(burst + 1)); burst = 0 }
                 continue
             }
             if delta >= 1_000 { pauses.append(delta) }

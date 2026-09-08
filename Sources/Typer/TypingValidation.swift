@@ -38,7 +38,7 @@ struct ValidationTrial: Codable, Equatable {
 }
 
 struct ValidationReport: Codable, Equatable {
-    var schemaVersion = 1
+    var schemaVersion = 2
     var modelVersion = "paired-timing-v2"
     var createdAt: Date
     var context: String
@@ -47,6 +47,18 @@ struct ValidationReport: Codable, Equatable {
     var limitations: [String]
     var trials: [ValidationTrial]
     var humanToHuman: TraceComparison?
+    var overview: [ValidationOverviewRow]? = nil
+}
+
+struct ValidationOverviewRow: Codable, Equatable {
+    var name: String
+    var unit: String
+    var pairedTrials: Int
+    var naturalMedianW1: Double?
+    var personalMedianW1: Double?
+    var humanToHumanW1: Double?
+    var naturalRange: [Double]
+    var personalRange: [Double]
 }
 
 enum TypingValidation {
@@ -124,11 +136,15 @@ enum TypingValidation {
             referenceMissingHolds: reference.missingDwellCount, candidateMissingHolds: candidate.missingDwellCount)
     }
 
-    static func evaluate(samples: [TrainingSample], seeds: [UInt64] = [17, 41, 89]) -> ValidationReport {
-        let context = samples.last?.mode
-        let eligible = samples.filter { $0.mode == context && ($0.evidence?.pairs.count ?? 0) >= 20 }
+    static func eligibleSamples(_ samples: [TrainingSample], mode: TrainingMode?) -> [TrainingSample] {
+        samples.filter { !$0.isLegacy && $0.mode == mode && ($0.evidence?.pairs.count ?? 0) >= 20 }
+    }
+
+    static func evaluate(samples: [TrainingSample], mode: TrainingMode? = nil, seeds: [UInt64] = [17, 41, 89]) -> ValidationReport {
+        let context = mode ?? samples.last?.mode
+        let eligible = eligibleSamples(samples, mode: context)
         var report = ValidationReport(createdAt: Date(), context: context?.rawValue ?? "Unknown legacy context", eligibleSessions: eligible.count,
-            status: "Needs four new sessions in the same training mode, each with at least 20 paired timings.",
+            status: "Not enough comparable sessions yet.",
             limitations: [
                 "Distances describe stored, bounded observations; they are not a human probability or a significance test.",
                 "Two latest sessions are held out together. Earlier sessions alone fit the personal model; each seed evaluates both modes at the same WPM.",
@@ -137,6 +153,7 @@ enum TypingValidation {
                 "Rollover denominator is eligible adjacent character pairs with a valid preceding hold. QWERTY finger classes are assumed.",
                 "This evaluates planned timelines. Application delivery and realized OS timing require a separate receiver check."
             ], trials: [], humanToHuman: nil)
+        report.limitations.append("Overview rows report median W1 and range across paired Natural/My rhythm trials with the same session, seed and WPM. Seeds share human sessions; they are not independent human replicates.")
         guard eligible.count >= 4 else { return report }
         let split = eligible.count - 2
         let training = Array(eligible.prefix(split).suffix(5))
@@ -156,15 +173,44 @@ enum TypingValidation {
                         profile: mode == .personal ? profile : .baseline(wpm: speed), using: &random)
                     report.trials.append(ValidationTrial(heldOutSession: index + 1,
                         trainingSessions: Array((max(0, split - 5) + 1)...split), seed: seed, mode: mode.rawValue, wpm: speed,
-                        textMatched: heldOut.referenceText != nil,
+                        textMatched: heldOut.referenceText != nil && heldOut.referenceCompleted == true,
                         comparison: compare(reference: heldOut.evidence!, candidate: evidence(for: plan))))
                 }
             }
         }
         report.status = "Two held-out sessions · \(training.count) training sessions · \(seeds.count) seeds per mode"
         if report.trials.contains(where: { !$0.textMatched }) {
-            report.limitations.append("Freewrite/Live/legacy text is unavailable. Generated text is a standard passage, so content mix may explain differences.")
+            report.limitations.append("Some text is unmatched or completion is unverified. Freewrite/Live use a standard passage. Incomplete or older Copy/Sprint samples use their prompt without claiming the recorded text matched it. Content mix may explain differences.")
         }
+        report.overview = overview(trials: report.trials, humanToHuman: report.humanToHuman)
         return report
+    }
+
+    static func overview(trials: [ValidationTrial], humanToHuman: TraceComparison?) -> [ValidationOverviewRow] {
+        let natural = trials.filter { $0.mode == TypingSettings.Mode.natural.rawValue }
+        let personal = trials.filter { $0.mode == TypingSettings.Mode.personal.rawValue }
+        let names = ["Key hold", "Press interval", "Signed flight", "Overlap duration", "Pause ≥ 1 s",
+                     "Burst length (< 310 ms)", "Deletion run", "Pre-deletion interval"]
+        return names.map { name in
+            var a: [Double] = [], b: [Double] = []
+            var unit = "ms"
+            for trial in natural {
+                guard let match = personal.first(where: {
+                    $0.heldOutSession == trial.heldOutSession && $0.seed == trial.seed && $0.wpm == trial.wpm &&
+                        $0.textMatched == trial.textMatched && $0.trainingSessions == trial.trainingSessions
+                }), let left = trial.comparison.distributions.first(where: { $0.name == name }),
+                    let right = match.comparison.distributions.first(where: { $0.name == name }),
+                    let x = left.wassersteinDistance, let y = right.wassersteinDistance,
+                    x.isFinite, y.isFinite, left.unit == right.unit else { continue }
+                unit = left.unit
+                a.append(x); b.append(y)
+            }
+            let human = humanToHuman?.distributions.first(where: { $0.name == name })
+            if a.isEmpty, let human { unit = human.unit }
+            return ValidationOverviewRow(name: name, unit: unit, pairedTrials: a.count,
+                naturalMedianW1: a.isEmpty ? nil : TypingEngine.median(a),
+                personalMedianW1: b.isEmpty ? nil : TypingEngine.median(b), humanToHumanW1: human?.wassersteinDistance,
+                naturalRange: a.isEmpty ? [] : [a.min()!, a.max()!], personalRange: b.isEmpty ? [] : [b.min()!, b.max()!])
+        }
     }
 }

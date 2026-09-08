@@ -4,6 +4,7 @@ struct ProfilesView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var profiles: ProfileStore
     @State private var showsValidation = false
+    @State private var showsPlaybackCheck = false
 
     init(model: AppModel) {
         self.model = model
@@ -48,6 +49,12 @@ struct ProfilesView: View {
                 Label("Understand these measurements and validate a profile", systemImage: "questionmark.circle")
             }
             .buttonStyle(QuietButtonStyle()).padding(.top, 14)
+            HStack(spacing: 4) {
+                Button { showsPlaybackCheck = true } label: {
+                    Label("Check playback on this Mac", systemImage: "keyboard")
+                }.buttonStyle(QuietButtonStyle())
+                HelpTip(title: "Playback check", text: "Test actual event delivery into a dedicated editor inside Typer. Checks text, missing keys, overlap and timing error without using your training data. Other apps may handle keys differently.")
+            }.padding(.top, 5)
             if !profiles.samples.isEmpty || !profiles.profiles.isEmpty {
                 Button("Delete all learned data", role: .destructive) { profiles.deleteAllLearnedData() }
                     .buttonStyle(QuietButtonStyle()).padding(.top, 18)
@@ -55,7 +62,11 @@ struct ProfilesView: View {
             Spacer()
         }
         .sheet(isPresented: $showsValidation) { ValidationView(samples: profiles.samples.filter { !$0.isLegacy }) }
-        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in showsValidation = false }
+        .sheet(isPresented: $showsPlaybackCheck) { PlaybackCheckView() }
+        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in
+            showsValidation = false
+            showsPlaybackCheck = false
+        }
         .padding(.horizontal, TyperLayout.workspaceHorizontalPadding)
         .padding(.top, TyperLayout.workspaceTopPadding)
         .padding(.bottom, TyperLayout.workspaceBottomPadding)

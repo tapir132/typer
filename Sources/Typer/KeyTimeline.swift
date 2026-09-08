@@ -93,6 +93,9 @@ struct PhysicalKeyAction: Equatable {
     var shift: Bool
     var option: Bool
     var unicode: String = ""
+    // Diagnostic provenance, never used to alter the key's physical behavior.
+    var eventIndex: Int? = nil
+    var scheduledOffset: Double? = nil
 }
 
 /// Owns the output ledger for one run. Cancellation and output share a lock:
@@ -134,9 +137,9 @@ final class PlaybackSession: @unchecked Sendable {
             }
             // Register before emitting so an output failure still attempts key-up.
             pressed[action.eventIndex] = key
-            guard send(code: key.code, down: true, unicode: key.unicode) else { return abort() }
+            guard send(code: key.code, down: true, unicode: key.unicode, action: action) else { return abort() }
         } else if let held = pressed.removeValue(forKey: action.eventIndex) {
-            guard send(code: held.code, down: false, unicode: held.unicode) else {
+            guard send(code: held.code, down: false, unicode: held.unicode, action: action) else {
                 pressed[action.eventIndex] = held
                 return abort()
             }
@@ -152,9 +155,10 @@ final class PlaybackSession: @unchecked Sendable {
         return true
     }
 
-    func run(plan: TypingPlan) -> Outcome {
+    func run(plan: TypingPlan, onStart: ((Double) -> Void)? = nil) -> Outcome {
         let actions = KeyTimeline.actions(for: KeyTimeline.strokes(for: plan.events))
         let origin = ProcessInfo.processInfo.systemUptime
+        onStart?(origin)
         defer {
             condition.lock(); releaseAll(); condition.unlock()
         }
@@ -177,8 +181,9 @@ final class PlaybackSession: @unchecked Sendable {
         return failed ? .failed : cancelled ? .cancelled : .complete
     }
 
-    private func send(code: UInt16, down: Bool, unicode: String = "") -> Bool {
-        emit(PhysicalKeyAction(code: code, isDown: down, shift: shiftDown, option: optionDown, unicode: unicode))
+    private func send(code: UInt16, down: Bool, unicode: String = "", action: TimelineAction? = nil) -> Bool {
+        emit(PhysicalKeyAction(code: code, isDown: down, shift: shiftDown, option: optionDown, unicode: unicode,
+                               eventIndex: action?.eventIndex, scheduledOffset: action?.offset))
     }
 
     private func abort() -> Bool { failed = true; releaseAll(); return false }

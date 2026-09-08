@@ -73,7 +73,7 @@ enum TypingEngine {
         return median(values.map { abs($0 - center) })
     }
 
-    static func summarize(records: [TrainingKeyRecord], target: String, duration: Double, mode: TrainingMode? = nil) -> TrainingSample {
+    static func summarize(records: [TrainingKeyRecord], target: String, duration: Double, mode: TrainingMode? = nil, completedText: String? = nil) -> TrainingSample {
         let evidence = TimingEvidence.extract(records)
         let characters = records.filter { $0.kind == .character }
         let intervals = zip(records, records.dropFirst()).compactMap { prior, current -> Double? in
@@ -111,7 +111,8 @@ enum TypingEngine {
             punctuationPause: punctuationPauses.isEmpty ? 760 : median(punctuationPauses),
             wordPause: max(20, (wordPauses.isEmpty ? 246 : median(wordPauses)) - center),
             digraphs: evidence.digraphPairs.mapValues { $0.values.map(\.interval) }, confusions: confusions,
-            evidence: evidence, mode: mode, capturedAt: Date(), referenceText: mode == .copy || mode == .sprint ? target : nil
+            evidence: evidence, mode: mode, capturedAt: Date(), referenceText: mode == .copy || mode == .sprint ? target : nil,
+            referenceCompleted: (mode == .copy || mode == .sprint) ? completedText.map { Array($0.utf8) == Array(target.utf8) } : nil
         )
     }
 

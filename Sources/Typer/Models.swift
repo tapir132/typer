@@ -186,6 +186,9 @@ struct TrainingSample: Codable, Equatable {
     var capturedAt: Date? = nil
     // Only the built-in Copy/Sprint reference prompt, never captured Live text.
     var referenceText: String? = nil
+    // Nil means the older recording did not verify passage completion.
+    // This does not make an otherwise current sample Legacy.
+    var referenceCompleted: Bool? = nil
 
     var isLegacy: Bool { evidence == nil || mode == nil }
 }
