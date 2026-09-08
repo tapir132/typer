@@ -2,6 +2,23 @@ import Foundation
 import Testing
 @testable import Typer
 
+// Do not block Swift Testing's cooperative executor while a GCD playback
+// worker needs CPU. The two-core CI runner can otherwise starve that worker.
+func takePlaybackSignal(_ semaphore: DispatchSemaphore) -> Bool {
+    // Zero timeout is a nonblocking poll; keep it outside the async context
+    // because Dispatch marks even this form of wait as unavailable there.
+    semaphore.wait(timeout: .now()) == .success
+}
+
+func playbackSignal(_ semaphore: DispatchSemaphore, timeout: Double = 5) async throws -> Bool {
+    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+    repeat {
+        if takePlaybackSignal(semaphore) { return true }
+        try await Task.sleep(for: .milliseconds(10))
+    } while ProcessInfo.processInfo.systemUptime < deadline
+    return false
+}
+
 struct PlaybackControlsTests {
     private func plan(_ events: [PlannedEvent]) -> TypingPlan {
         let normalized = KeyTimeline.normalized(events)
@@ -37,12 +54,13 @@ struct PlaybackControlsTests {
         }
     }
 
-    @Test func pauseFreezesDeadlineAndCancelWorksWhilePaused() {
+    @Test func pauseFreezesDeadlineAndCancelWorksWhilePaused() async throws {
         let waiting = DispatchSemaphore(value: 0), finished = DispatchSemaphore(value: 0)
         let session = PlaybackSession { _ in true }
+        defer { session.cancel() }
         let plan = plan([PlannedEvent(kind: .character, value: "a", flight: 5_000, dwell: 50)])
         var observed: [Double] = []
-        DispatchQueue.global().async {
+        DispatchQueue(label: "typer.test.freeze").async {
             _ = session.run(plan: plan, onProgress: { progress in
                 if observed.isEmpty { session.pause() }
                 if progress.isPaused { observed.append(progress.remaining); waiting.signal() }
@@ -50,11 +68,11 @@ struct PlaybackControlsTests {
             })
             finished.signal()
         }
-        #expect(waiting.wait(timeout: .now() + 1) == .success)
-        #expect(waiting.wait(timeout: .now() + 1) == .success)
+        try #require(try await playbackSignal(waiting))
+        try #require(try await playbackSignal(waiting))
         session.cancel()
-        #expect(finished.wait(timeout: .now() + 1) == .success)
-        #expect(observed.count >= 3)
+        try #require(try await playbackSignal(finished, timeout: 1))
+        try #require(observed.count >= 3)
         #expect(abs(observed[observed.count - 1] - observed[observed.count - 2]) < 0.001)
     }
 
@@ -84,15 +102,16 @@ struct PlaybackControlsTests {
         #expect(!session.skipWait())
     }
 
-    @Test func pausedTimeIsAddedToFutureDeadlines() {
+    @Test func pausedTimeIsAddedToFutureDeadlines() async throws {
         let paused = DispatchSemaphore(value: 0), finished = DispatchSemaphore(value: 0)
         var output: [Double] = []
         let session = PlaybackSession { if $0.isDown { output.append(ProcessInfo.processInfo.systemUptime) }; return true }
+        defer { session.cancel() }
         let plan = plan([
             PlannedEvent(kind: .character, value: "a", flight: 0, dwell: 20),
             PlannedEvent(kind: .character, value: "b", flight: 180, dwell: 20)
         ])
-        DispatchQueue.global().async {
+        DispatchQueue(label: "typer.test.resume").async {
             var didPause = false
             _ = session.run(plan: plan, onProgress: { progress in
                 if !didPause && progress.fraction > 0 {
@@ -101,11 +120,12 @@ struct PlaybackControlsTests {
             })
             finished.signal()
         }
-        #expect(paused.wait(timeout: .now() + 1) == .success)
-        #expect(finished.wait(timeout: .now() + 0.25) == .timedOut)
+        try #require(try await playbackSignal(paused))
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(!takePlaybackSignal(finished))
         session.resume()
-        #expect(finished.wait(timeout: .now() + 2) == .success)
-        #expect(output.count == 2)
+        try #require(try await playbackSignal(finished))
+        try #require(output.count == 2)
         #expect(output[1] - output[0] >= 0.44)
     }
 

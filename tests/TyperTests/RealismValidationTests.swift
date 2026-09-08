@@ -257,16 +257,17 @@ struct RealismValidationTests {
         #expect(output.filter { $0.code == 56 && $0.isDown }.count == 1)
     }
 
-    @Test func cancellationInterruptsAnExtendedPause() {
+    @Test func cancellationInterruptsAnExtendedPause() async throws {
         let began = DispatchSemaphore(value: 0), finished = DispatchSemaphore(value: 0)
         let session = PlaybackSession { action in if action.isDown { began.signal() }; return true }
+        defer { session.cancel() }
         let events = [PlannedEvent(kind: .character, value: "a", flight: 0, dwell: 100),
                       PlannedEvent(kind: .character, value: "b", flight: 45_000, dwell: 100)]
         let plan = TypingPlan(events: events, duration: 45_200, repairs: 0, effectiveWPM: 0)
-        DispatchQueue.global().async { _ = session.run(plan: plan); finished.signal() }
-        #expect(began.wait(timeout: .now() + 1) == .success)
+        DispatchQueue(label: "typer.test.cancel").async { _ = session.run(plan: plan); finished.signal() }
+        try #require(try await playbackSignal(began))
         session.cancel()
-        #expect(finished.wait(timeout: .now() + 0.5) == .success)
+        #expect(try await playbackSignal(finished, timeout: 0.5))
     }
 
     @Test func pathologicalProfilesStillProduceFiniteBoundedPlans() {
