@@ -79,6 +79,23 @@ struct ValidationView: View {
                                             Text("\(item.referenceCount) / \(item.candidateCount)")
                                         }.font(.system(size: 11, design: .monospaced))
                                     }
+                                    if let rates = comparison.pauseRates {
+                                        Divider().gridCellUnsizedAxes(.horizontal)
+                                        GridRow {
+                                            Text("Pause frequency"); Text("Human rate"); Text("Candidate rate")
+                                            Text("Absolute gap"); Text("Pauses H / C"); Text("Opportunities H / C")
+                                        }.font(.caption.weight(.semibold))
+                                        ForEach(rates, id: \.name) { rate in
+                                            GridRow {
+                                                Text(rate.name)
+                                                Text(number(rate.referenceFrequency.map { $0 * 100 }) + "%")
+                                                Text(number(rate.candidateFrequency.map { $0 * 100 }) + "%")
+                                                Text(number(rate.referenceFrequency.flatMap { a in rate.candidateFrequency.map { abs(a - $0) * 100 } }) + " pp")
+                                                Text("\(rate.referencePauses.map(String.init) ?? "—") / \(rate.candidatePauses.map(String.init) ?? "—")")
+                                                Text("\(rate.referenceOpportunities.map(String.init) ?? "—") / \(rate.candidateOpportunities.map(String.init) ?? "—")")
+                                            }.font(.system(size: 11, design: .monospaced))
+                                        }
+                                    }
                                 }.frame(minWidth: 852, alignment: .leading)
                             }
                             Text("Lower distances mean closer distributions. A dash means unavailable. Small samples can be misleading; compare with human-to-human variation.")
@@ -162,7 +179,7 @@ struct ValidationView: View {
                     }
                 }.frame(minWidth: 852, alignment: .leading)
             }
-            Text("Several seeds reuse the same two human sessions. They are not independent human tests. Open Detailed trials to inspect retained counts, missing holds and each distribution.")
+            Text("Several seeds reuse the same two human sessions. They are not independent human tests. Open Detailed trials to inspect retained counts, missing holds, pause frequencies and opportunity counts. Duration distance alone does not describe how often a pause occurs.")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }

@@ -12,7 +12,7 @@ final class ProfileStore: ObservableObject {
     }
     var onChange: (() -> Void)?
 
-    private let defaults: UserDefaults
+    let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 

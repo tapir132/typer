@@ -45,6 +45,10 @@ struct ProfilesView: View {
                 ForEach(profiles.profiles) { profile in profileRow(profile) }
             }
             .overlay(alignment: .top) { Rectangle().fill(TyperTheme.line).frame(height: 1) }
+            DisclosureGroup("Training coverage") {
+                TrainingCoverageView(profile: profiles.activeProfile).padding(.vertical, 14)
+            }
+            .font(.system(size: 12, weight: .medium)).padding(.top, 18)
             Button { model.showGuide(.measurements) } label: {
                 Label("Understand these measurements and validate a profile", systemImage: "questionmark.circle")
             }

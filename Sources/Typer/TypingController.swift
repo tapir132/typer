@@ -7,6 +7,12 @@ import Foundation
 final class TypingController: ObservableObject {
     @Published private(set) var state: RunState = .ready
     @Published private(set) var lastPlan: TypingPlan?
+    @Published private(set) var progress = PlaybackProgress()
+    @Published private(set) var pauseMessage: String?
+    @Published var overlayEnabled = true { didSet { refreshOverlay() } }
+    private let screenOverlay = TypingScreenOverlay()
+    private var target: NSRunningApplication?
+    private var focusObserver: NSObjectProtocol?
 
     private var countdownTask: Task<Void, Never>?
     private var planningTask: Task<Void, Never>?
@@ -15,7 +21,22 @@ final class TypingController: ObservableObject {
 
     init() {
         GlobalStopHotKey.shared.onTrigger = { [weak self] in self?.stop() }
+        GlobalStopHotKey.shared.onTogglePause = { [weak self] in self?.togglePause() }
+        GlobalStopHotKey.shared.onSkipWait = { [weak self] in self?.skipWait() }
         GlobalStopHotKey.shared.register()
+        focusObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.state == .typing,
+                          NSWorkspace.shared.frontmostApplication?.processIdentifier != self.target?.processIdentifier else { return }
+                    self.pause(message: "App changed. Return to the same field in \(self.target?.localizedName ?? "the target app") to resume.")
+                }
+            }
+    }
+
+    deinit {
+        if let focusObserver { NSWorkspace.shared.notificationCenter.removeObserver(focusObserver) }
+        playbackSession?.cancel()
     }
 
     var accessibilityGranted: Bool { AXIsProcessTrusted() }
@@ -87,13 +108,66 @@ final class TypingController: ObservableObject {
         countdownTask = nil
         playbackSession?.cancel()
         playbackSession = nil
+        GlobalStopHotKey.shared.disablePlaybackControls()
+        screenOverlay.hide()
+        target = nil
+        pauseMessage = nil
+        progress = PlaybackProgress()
         if resetState { state = .stopped }
     }
 
-    func reset() { state = .ready }
+    func reset() { if !state.isBusy { state = .ready } }
+
+    func togglePause() {
+        if state == .typing { pause() }
+        else if state == .paused {
+            guard let target, !target.isTerminated,
+                  NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier else {
+                pauseMessage = "Focus the same field in \(target?.localizedName ?? "the target app") before resuming."
+                refreshOverlay()
+                return
+            }
+            playbackSession?.resume()
+            pauseMessage = nil
+            progress.isPaused = false
+            state = .typing
+            refreshOverlay()
+        }
+    }
+
+    func pause(message: String? = nil) {
+        guard state == .typing else { return }
+        playbackSession?.pause()
+        state = .paused
+        pauseMessage = message
+        progress.isPaused = true
+        refreshOverlay()
+    }
+
+    func skipWait() {
+        guard state == .typing else { return }
+        _ = playbackSession?.skipWait()
+    }
+
+    func focusTarget() { target?.activate(options: []) }
+
+    private func refreshOverlay() {
+        screenOverlay.update(state: state, progress: progress, target: target?.localizedName ?? "the target app",
+                             message: pauseMessage, enabled: overlayEnabled)
+    }
 
     private func begin(_ plan: TypingPlan) {
+        guard let target = NSWorkspace.shared.frontmostApplication, target.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            state = .error("Focus the target application before typing starts.")
+            return
+        }
+        guard GlobalStopHotKey.shared.enablePlaybackControls() else {
+            state = .error("The pause or skip shortcut is already in use. Free ⌘⌥P and ⌘⌥→ in the other app, then try again.")
+            return
+        }
+        self.target = target
         state = .typing
+        progress = PlaybackProgress(remaining: plan.duration / 1_000)
         let source = CGEventSource(stateID: .privateState)
         let session = PlaybackSession { action in
             guard let event = KeyboardEventPoster.make(action, source: source) else { return false }
@@ -101,11 +175,23 @@ final class TypingController: ObservableObject {
             return true
         }
         playbackSession = session
+        refreshOverlay()
         playbackQueue.async { [weak self] in
-            let outcome = session.run(plan: plan)
+            let outcome = session.run(plan: plan, onProgress: { progress in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.playbackSession === session else { return }
+                    var progress = progress
+                    progress.isPaused = self.state == .paused
+                    self.progress = progress
+                    self.refreshOverlay()
+                }
+            })
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.playbackSession === session else { return }
                 self.playbackSession = nil
+                GlobalStopHotKey.shared.disablePlaybackControls()
+                self.screenOverlay.hide()
+                self.target = nil
                 switch outcome {
                 case .complete: self.state = .complete
                 case .cancelled: self.state = .stopped
@@ -143,9 +229,29 @@ final class GlobalStopHotKey {
     static let shared = GlobalStopHotKey()
 
     var onTrigger: (() -> Void)?
+    var onTogglePause: (() -> Void)?
+    var onSkipWait: (() -> Void)?
     private(set) var isRegistered = false
     private var hotKeyRefs: [EventHotKeyRef] = []
     private var handlerRef: EventHandlerRef?
+    private var playbackRefs: [EventHotKeyRef] = []
+
+    func enablePlaybackControls() -> Bool {
+        guard playbackRefs.isEmpty else { return true }
+        for (code, id) in [(UInt32(kVK_ANSI_P), UInt32(3)), (UInt32(kVK_RightArrow), UInt32(4))] {
+            var reference: EventHotKeyRef?
+            let result = RegisterEventHotKey(code, UInt32(cmdKey | optionKey),
+                EventHotKeyID(signature: 0x5459_5052, id: id), GetEventDispatcherTarget(), 0, &reference)
+            guard result == noErr, let reference else { disablePlaybackControls(); return false }
+            playbackRefs.append(reference)
+        }
+        return true
+    }
+
+    func disablePlaybackControls() {
+        for reference in playbackRefs { UnregisterEventHotKey(reference) }
+        playbackRefs = []
+    }
 
     func register() {
         guard hotKeyRefs.isEmpty else { return }
@@ -178,8 +284,17 @@ final class GlobalStopHotKey {
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-        InstallEventHandler(GetEventDispatcherTarget(), { _, _, _ in
-            MainActor.assumeIsolated { GlobalStopHotKey.shared.onTrigger?() }
+        InstallEventHandler(GetEventDispatcherTarget(), { _, event, _ in
+            var identifier = EventHotKeyID()
+            guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                    nil, MemoryLayout<EventHotKeyID>.size, nil, &identifier) == noErr else { return noErr }
+            MainActor.assumeIsolated {
+                switch identifier.id {
+                case 3: GlobalStopHotKey.shared.onTogglePause?()
+                case 4: GlobalStopHotKey.shared.onSkipWait?()
+                default: GlobalStopHotKey.shared.onTrigger?()
+                }
+            }
             return noErr
         }, 1, &spec, nil, &handlerRef)
     }

@@ -49,7 +49,7 @@ struct RootView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
 
-            if controller.state == .typing {
+            if controller.state.isPlaybackActive {
                 runningOverlay
                     .transition(.opacity)
             }
@@ -61,7 +61,10 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.18), value: model.toast)
         .sheet(isPresented: $model.showsSystemSetup) { systemSetup }
-        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in model.showsSystemSetup = false }
+        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in
+            model.showsSystemSetup = false
+            model.controller.stop()
+        }
         .onAppear { updates.start() }
         .onChange(of: controller.state) { _, state in
             switch state {
@@ -180,10 +183,18 @@ struct RootView: View {
                 Image(systemName: "keyboard.fill")
                     .font(.system(size: 28, weight: .medium))
                     .foregroundStyle(TyperTheme.signal)
-                Text("Typing in the active app").font(.system(size: 20, weight: .semibold))
-                Text("Stop anytime with  ⌘ Esc  /  ⌃ Esc")
+                Text(controller.state == .paused ? "Typing is paused" : controller.progress.activity).font(.system(size: 20, weight: .semibold))
+                Text(controller.pauseMessage ?? "⌘⌥P pause/resume · ⌘ Esc / ⌃ Esc stop")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(TyperTheme.mutedStrong)
+                if controller.state == .paused {
+                    Button("Return to target app") { controller.focusTarget() }.buttonStyle(SecondaryButtonStyle())
+                    Text("Focus the same field, then press ⌘⌥P.").font(.caption).foregroundStyle(TyperTheme.mutedStrong)
+                } else {
+                    Button("Pause typing") { controller.pause() }.buttonStyle(SecondaryButtonStyle())
+                    Button("Skip current wait") { controller.skipWait() }.buttonStyle(QuietButtonStyle())
+                        .disabled(!controller.progress.canSkipWait)
+                }
                 Button("Stop typing") { controller.stop() }
                     .buttonStyle(SecondaryButtonStyle())
                     .padding(.top, 4)

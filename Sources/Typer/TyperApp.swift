@@ -56,16 +56,31 @@ struct TyperApp: App {
                 Button("Check for Updates…") { updateManager.checkForUpdates() }
                     .disabled(!updateManager.canCheckForUpdates)
             }
-            CommandMenu("Typing") {
-                Button("Arm Typing") { model.arm() }
-                    .keyboardShortcut(.return, modifiers: .command)
-                Button("Stop Typing") { model.controller.stop() }
-                    .keyboardShortcut(.escape, modifiers: .command)
-            }
+            TypingCommands(model: model, controller: model.controller)
             CommandGroup(replacing: .help) {
                 Button("Typer Guide") { model.showGuide(.firstRun) }
                     .keyboardShortcut("?", modifiers: .command)
             }
+        }
+    }
+}
+
+private struct TypingCommands: Commands {
+    @ObservedObject var model: AppModel
+    @ObservedObject var controller: TypingController
+
+    var body: some Commands {
+        CommandMenu("Typing") {
+            Button("Arm Typing") { model.arm() }
+                .keyboardShortcut(.return, modifiers: .command).disabled(controller.state.isBusy)
+            Button("Stop Typing") { controller.stop() }
+                .keyboardShortcut(.escape, modifiers: .command)
+            Button("Pause / Resume Typing") { controller.togglePause() }
+                .keyboardShortcut("p", modifiers: [.command, .option])
+                .disabled(!controller.state.isPlaybackActive)
+            Button("Skip Current Wait") { controller.skipWait() }
+                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                .disabled(!controller.progress.canSkipWait || controller.state != .typing)
         }
     }
 }

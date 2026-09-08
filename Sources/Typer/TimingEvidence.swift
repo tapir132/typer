@@ -41,6 +41,7 @@ struct TimingEvidence: Codable, Equatable {
     var intervalCount = 0
     var missingDwellCount = 0
     var excludedTransitionCount = 0
+    var pauseContexts: [String: PauseDistribution]? = nil
 
     var rolloverRate: Double? {
         guard !pairs.values.isEmpty else { return nil }
@@ -49,6 +50,7 @@ struct TimingEvidence: Codable, Equatable {
 
     static func extract(_ records: [TrainingKeyRecord]) -> TimingEvidence {
         var evidence = TimingEvidence()
+        evidence.pauseContexts = PauseLearning.extract(records)
         let characters = records.filter { $0.kind == .character }
         evidence.characterCount = characters.count
         let holds = characters.compactMap(\.dwell).filter { $0.isFinite && (10...500).contains($0) }
@@ -139,6 +141,8 @@ struct TimingEvidence: Codable, Equatable {
 
     static func merge(_ samples: [TimingEvidence]) -> TimingEvidence {
         var result = TimingEvidence()
+        let contextual = samples.compactMap(\.pauseContexts)
+        result.pauseContexts = contextual.isEmpty ? nil : PauseLearning.merge(contextual)
         func mergePairs(_ distributions: [PairDistribution], limit: Int) -> PairDistribution {
             // A session contributes at most 128 observations per pool. Longer
             // sessions get more weight, but cannot drown all other sessions.

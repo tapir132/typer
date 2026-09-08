@@ -24,9 +24,15 @@ The build script uses the local `Cadence Signing` identity when available so Acc
 2. Choose WPM and realism settings.
 3. Click **Arm typing**.
 4. During the five-second countdown, focus any editable field in another app.
-5. Press **⌘ Esc** at any time to stop immediately.
+5. Press **⌘⌥P** to pause/resume, **⌘⌥→** to skip a long wait, or **⌘ Esc / ⌃ Esc** to stop.
 
-While playback is running, Typer's own window shows the emergency hotkeys and a clickable **Stop typing** control. The overlay never covers the application receiving the text.
+During playback, a red fullscreen overlay covers connected screens with a large pause/resume shortcut, destination, progress and wait label. It stays visible with a lighter tint while paused and disappears on stop or completion. It does not take keyboard focus and passes mouse clicks through. **Compose → Fullscreen typing overlay** toggles it; the default is on.
+
+Pause releases held keys and freezes the run's clock. Resume continues from that point; skip shortens only the current long wait. Switching apps pauses playback, and resuming requires the original app to be active. Focus the same text field and avoid moving the cursor or editing unfinished output. Typer remembers the app, but cannot restore or lock an insertion point within it.
+
+**Play preview** above Source text plays the current plan in an in-memory editor, showing the actual text, corrections, labeled waits and remaining time. It supports pause/resume, skip and stop without posting OS keys or requiring Accessibility. The preview is an abstract editor; external apps may interpret edits differently. Arm uses the same plan while text/settings remain unchanged.
+
+Compose remembers controls across launches. The **Preset** menu includes Quick messages, Long-form writing and Clean copy. **Save…** stores a named setup; up to 30 personal presets can be kept and removed from the menu. Presets save controls, including the overlay, but never source text or a learned-profile selection.
 
 Open **Guide** in the top navigation or **Help → Typer Guide** for first-run steps, controls, training, measurement definitions, validation, permissions, updates, and troubleshooting. Small **?** icons beside controls and statistics show a quick explanation on hover; click one to keep the explanation open. **Train → How training works** opens the guide in a sheet so you can read it without leaving your current exercise.
 
@@ -52,6 +58,8 @@ Typer keeps twelve current samples, with up to five recent samples from the newl
 
 The approach is informed by the [CMU keystroke-dynamics benchmark](https://www.cs.cmu.edu/~keystroke/), research showing that immediate and delayed repairs have measurably different timing ([Correction Without Consciousness in Complex Tasks](https://pmc.ncbi.nlm.nih.gov/articles/PMC8740635/)), and field research using inter-key interval plus backspace behavior as typing markers ([Dynamics in typewriting performance](https://pmc.ncbi.nlm.nih.gov/articles/PMC7537853/)).
 
+**Profiles → Training coverage** shows evidence for key timing, rollover, corrections, and pauses within words, between words and at sentence boundaries. Counts describe support, not proven realism. **Learned pause habits** in My rhythm uses new context summaries only after at least 20 opportunities, three observed/retained pauses and two sessions in a category. It blends rates and durations with fallback behavior and keeps training modes separate. Existing current profiles remain useful without clearing; older samples lack these summaries and use fallback pauses until new recordings provide support. Legacy profiles stay locked.
+
 ## Validate the model
 
 Open **Profiles → Validate rhythm** after saving four current sessions in the same mode. Choose a training context to see its ready count. Two later sessions are held out; earlier sessions alone train the temporary comparison profile. Overview compares Natural and My rhythm across paired trials using the same WPM and seeds, and includes a human-to-human reference. Detailed trials retains every comparison and observation count. Copy/Sprint text is only labeled matched when exact passage completion was recorded; partial or older unverified samples remain usable with that limitation. Live and Freewrite comparisons are unmatched.
@@ -66,7 +74,7 @@ The report provides median/MAD, KS and Wasserstein distances, rollover, autocorr
 - Some protected fields, remote desktops, games, or apps that intercept keyboard events may not accept simulated keystrokes.
 - The simulator plans repairs that restore the source text. The destination app's editing behavior, autocorrect, and keyboard handling can affect the delivered result.
 - Human variation changes dwell, flight, bursts, and pauses only. Mistake frequency independently controls how many errors are injected and repaired.
-- Thought pauses have a 2.5% chance after each sentence ending. Normal pauses last 2–5 seconds; Extended thought pauses use a skewed 2–45-second range. Any selected pause is included in the displayed time estimate, and the emergency stop remains responsive during it.
+- Generic Thought pauses have a 2.5% chance after each sentence ending. Supported learned sentence habits replace this occasional generic stall when enabled in My rhythm. Normal pauses last 2–5 seconds; Extended thought pauses use a skewed 2–45-second range. Any selected pause is included in the displayed time estimate, and the emergency stop remains responsive during it.
 - **Sentence pauses** is a separate, optional Compose control. It waits after every detected sentence when more text follows, with a default random range of 2–10 seconds. Min and Max can each be set from 1–60 seconds; equal values give a fixed pause. It works with Thought pauses off and in Clean mode. At the same boundary, the longer of an existing pause and the sentence pause wins. Closing quotes and punctuation clusters stay together, and no extra wait is added at the end of the text. Detection uses Apple's [sentence tokenizer](https://developer.apple.com/documentation/naturallanguage/nltokenizer); unusual abbreviations and formatting can still be ambiguous.
 - Sparkle checks the stable GitHub release feed by default. The optional Edge channel follows successful builds from `main`; both feeds require a valid Ed25519 signature.
 

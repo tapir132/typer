@@ -4,6 +4,7 @@ struct ComposeView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var controller: TypingController
     @ObservedObject private var profiles: ProfileStore
+    @State private var showsPlaybackPreview = false
 
     init(model: AppModel) {
         self.model = model
@@ -17,7 +18,7 @@ struct ComposeView: View {
                 .padding(.bottom, 26)
             HStack(alignment: .top, spacing: 0) {
                 editor
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(maxWidth: .infinity)
                     .padding(.trailing, 30)
                 controlRail
                     .frame(width: 306)
@@ -30,6 +31,8 @@ struct ComposeView: View {
         .padding(.horizontal, TyperLayout.workspaceHorizontalPadding)
         .padding(.top, TyperLayout.workspaceTopPadding)
         .padding(.bottom, TyperLayout.workspaceBottomPadding)
+        .sheet(isPresented: $showsPlaybackPreview) { PlaybackPreviewView(plan: model.previewPlan, text: model.sourceText) }
+        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in showsPlaybackPreview = false }
     }
 
     private var heading: some View {
@@ -60,6 +63,8 @@ struct ComposeView: View {
             HStack {
                 Text("Source text").font(.system(size: 11, weight: .medium)).foregroundStyle(TyperTheme.mutedStrong)
                 Spacer()
+                Button("Play preview") { showsPlaybackPreview = true }.buttonStyle(QuietButtonStyle())
+                    .disabled(!model.isPreviewReady || controller.state.isBusy)
                 Button("Paste") { model.paste() }.buttonStyle(QuietButtonStyle())
                 Button("Clear") { model.sourceText = "" }.buttonStyle(QuietButtonStyle())
             }
@@ -80,7 +85,7 @@ struct ComposeView: View {
             }
             .background(TyperTheme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .frame(minHeight: 260)
+            .frame(height: 300)
 
             HStack {
                 Text("\(model.sourceText.count.formatted()) characters")
@@ -95,7 +100,7 @@ struct ComposeView: View {
                 HStack {
                     Text("Rhythm preview").font(.system(size: 11, weight: .medium))
                     Spacer()
-                    Text("timing only · \(model.previewPlan.repairs) repair\(model.previewPlan.repairs == 1 ? "" : "s") from Mistake frequency")
+                    Text("\(model.previewPlan.repairs) repair\(model.previewPlan.repairs == 1 ? "" : "s")")
                         .font(.system(size: 9, design: .monospaced)).foregroundStyle(TyperTheme.muted)
                 }
                 RhythmWaveform(plan: model.previewPlan)
@@ -116,6 +121,28 @@ struct ComposeView: View {
                 Text("\(Int((model.settings.variation * 100).rounded()))% variation").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.signal)
             }
             .frame(height: 54)
+
+            Button(action: model.arm) {
+                HStack {
+                    Image(systemName: "play.fill").font(.system(size: 11))
+                    Text("Arm typing")
+                    Spacer()
+                    Text("⌘↩").font(.system(size: 9, weight: .medium, design: .monospaced)).opacity(0.78)
+                }
+                .padding(.horizontal, 14)
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.state.isBusy)
+
+            Text("Pause/resume: ⌘⌥P  ·  Stop: ⌘ Esc / ⌃ Esc")
+                .font(.system(size: 8.5, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.muted).multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity).padding(.top, 9)
+
+            controlGroup {
+                compactToggle("Fullscreen typing overlay", note: "Red tint with large pause shortcuts", help: "Shows a translucent red overlay on every screen while typing, with pause/resume, skip and stop shortcuts. The overlay does not take focus and clicks pass through it. Turn this off for an unobscured view of the target app.", binding: $model.settings.showTypingOverlay)
+            }
+
+            controlGroup { PresetControls(model: model) }
 
             controlGroup {
                 HStack(spacing: 4) {
@@ -168,6 +195,7 @@ struct ComposeView: View {
             VStack(spacing: 5) {
                 compactToggle("Delayed repairs", note: "Notice errors a word or two later", help: "Lets some generated errors remain for a few characters before Typer returns to correct them. This has no effect when generated mistakes are disabled.", binding: $model.settings.delayedRepairs)
                 compactToggle("Thought pauses", note: "Occasional 2–5 second stalls", help: "Adds occasional thinking pauses of about 2–5 seconds. Pauses are included in the estimate, and Stop remains available during them.", binding: $model.settings.thoughtPauses)
+                compactToggle("Learned pause habits", note: "My rhythm · uses recorded boundaries", help: "Uses recorded pause frequency and length for word, sentence and within-word contexts. Requires My rhythm and sufficient new evidence; sparse contexts keep the usual cadence. Profiles → Training coverage shows what is available.", isEnabled: model.isUsingLearnedProfile && !profiles.activeProfile.isLegacy, binding: $model.settings.learnedPauses)
                 compactToggle("Extended thought pauses", note: "2.5% per sentence end · 2–45 seconds", help: "Allows a longer 2–45 second pause with a 2.5% chance at each eligible sentence ending. Requires Thought pauses; short text may not contain a long pause.", isEnabled: model.settings.thoughtPauses, binding: $model.settings.extendedThoughtPauses)
                 compactToggle("Sentence pauses", note: "\(model.settings.sentencePauseMinimum)–\(model.settings.sentencePauseMaximum) seconds · every sentence", help: QuickHelp.sentencePauses, binding: $model.settings.sentencePauses)
                 if model.settings.sentencePauses {
@@ -193,26 +221,9 @@ struct ComposeView: View {
                 compactToggle("Fatigue drift", note: "Cadence evolves over long runs", help: "Gradually changes the cadence as a run progresses instead of maintaining one pace from start to finish. It does not change the intended final text.", binding: $model.settings.fatigueDrift)
             }
             .padding(.vertical, 10)
-
-            Button(action: model.arm) {
-                HStack {
-                    Image(systemName: "play.fill").font(.system(size: 11))
-                    Text("Arm typing")
-                    Spacer()
-                    Text("⌘↩").font(.system(size: 9, weight: .medium, design: .monospaced)).opacity(0.78)
-                }
-                .padding(.horizontal, 14)
-            }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.state == .typing || controller.state == .preparing || isArmed)
-
-            Text("After Arm: focus target  ·  Stop: ⌘ Esc / ⌃ Esc")
-                .font(.system(size: 8.5, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.muted).multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity).padding(.top, 9)
         }
     }
 
-    private var isArmed: Bool { if case .armed = controller.state { return true }; return false }
     private var mistakeLabel: String { ["None", "Light", "Natural", "Frequent", "Messy", "Chaotic"][model.settings.mistakeLevel] }
     private var modeDescription: String {
         switch model.settings.mode {

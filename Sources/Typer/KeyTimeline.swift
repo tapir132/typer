@@ -108,6 +108,12 @@ final class PlaybackSession: @unchecked Sendable {
     private var pressed: [Int: KeyDescriptor] = [:]
     private var shiftDown = false
     private var optionDown = false
+    private var paused = false
+    private var origin: Double?
+    private var pauseBegan: Double?
+    private var suspended = 0.0
+    private var skipped = 0.0
+    private var waitOffset: Double?
     private let emit: (PhysicalKeyAction) -> Bool
 
     init(emit: @escaping (PhysicalKeyAction) -> Bool) { self.emit = emit }
@@ -120,11 +126,50 @@ final class PlaybackSession: @unchecked Sendable {
         condition.unlock()
     }
 
+    func pause() {
+        condition.lock(); defer { condition.unlock() }
+        guard !paused, !cancelled, !failed else { return }
+        paused = true
+        pauseBegan = ProcessInfo.processInfo.systemUptime
+        releaseAll()
+        condition.broadcast()
+    }
+
+    func resume() {
+        condition.lock(); defer { condition.unlock() }
+        guard paused, !cancelled, !failed else { return }
+        if let pauseBegan { suspended += ProcessInfo.processInfo.systemUptime - pauseBegan }
+        self.pauseBegan = nil
+        paused = false
+        condition.broadcast()
+    }
+
+    @discardableResult func skipWait() -> Bool {
+        condition.lock(); defer { condition.unlock() }
+        guard !paused, !cancelled, !failed, let waitOffset else { return false }
+        let remaining = waitOffset - elapsed()
+        guard remaining > 0 else { return false }
+        skipped += remaining
+        self.waitOffset = nil
+        condition.broadcast()
+        return true
+    }
+
+    // All scheduler clock fields are protected by condition.
+    private func elapsed() -> Double {
+        guard let origin else { return 0 }
+        return max(0, (pauseBegan ?? ProcessInfo.processInfo.systemUptime) - origin - suspended + skipped)
+    }
+
     @discardableResult
     func perform(_ action: TimelineAction, events: [PlannedEvent]) -> Bool {
         condition.lock()
         defer { condition.unlock() }
-        guard !cancelled, !failed, events.indices.contains(action.eventIndex) else { return false }
+        return performLocked(action, events: events)
+    }
+
+    private func performLocked(_ action: TimelineAction, events: [PlannedEvent]) -> Bool {
+        guard !cancelled, !failed, !paused, events.indices.contains(action.eventIndex) else { return false }
         let key = KeyDescriptor(event: events[action.eventIndex])
         if action.isDown {
             if key.shift && !shiftDown {
@@ -155,28 +200,58 @@ final class PlaybackSession: @unchecked Sendable {
         return true
     }
 
-    func run(plan: TypingPlan, onStart: ((Double) -> Void)? = nil) -> Outcome {
+    func run(plan: TypingPlan, onStart: ((Double) -> Void)? = nil,
+             onProgress: ((PlaybackProgress) -> Void)? = nil) -> Outcome {
         let actions = KeyTimeline.actions(for: KeyTimeline.strokes(for: plan.events))
         let origin = ProcessInfo.processInfo.systemUptime
+        condition.lock()
+        self.origin = origin
+        if paused { pauseBegan = origin }
+        condition.unlock()
         onStart?(origin)
         defer {
             condition.lock(); releaseAll(); condition.unlock()
         }
-        for action in actions {
-            condition.lock()
-            while !cancelled && !failed {
-                let remaining = origin + action.offset / 1_000 - ProcessInfo.processInfo.systemUptime
-                if remaining <= 0 { break }
-                // Deadlines are recomputed from a monotonic clock, never accumulated sleeps.
-                _ = condition.wait(until: Date(timeIntervalSinceNow: min(0.05, remaining)))
-            }
-            let canContinue = !cancelled && !failed
-            condition.unlock()
-            if !canContinue || !perform(action, events: plan.events) {
-                condition.lock(); defer { condition.unlock() }
-                return failed ? .failed : .cancelled
+        var lastReport = -Double.infinity
+        for (position, action) in actions.enumerated() {
+            while true {
+                condition.lock()
+                if cancelled || failed {
+                    let outcome: Outcome = failed ? .failed : .cancelled
+                    condition.unlock()
+                    return outcome
+                }
+                let remaining = action.offset / 1_000 - elapsed()
+                let event = plan.events[action.eventIndex]
+                let longWait = action.isDown && event.flight >= 1_000 && remaining > 0
+                waitOffset = longWait ? action.offset / 1_000 : nil
+                if !paused && remaining <= 0 {
+                    let success = performLocked(action, events: plan.events)
+                    condition.unlock()
+                    if !success { return .failed }
+                    break
+                }
+                let progress = PlaybackProgress(fraction: Double(position) / Double(max(1, actions.count)),
+                    remaining: max(0, plan.duration / 1_000 - elapsed()), waitRemaining: max(0, remaining),
+                    pauseKind: longWait ? event.pauseKind ?? (event.kind == .character ? .hesitation : .repair) : nil,
+                    isPaused: paused)
+                condition.unlock()
+                let now = ProcessInfo.processInfo.systemUptime
+                if now - lastReport >= 0.05 {
+                    onProgress?(progress) // Outside the lock: callbacks may pause/cancel.
+                    lastReport = now
+                }
+                condition.lock()
+                if !cancelled && !failed {
+                    let freshRemaining = action.offset / 1_000 - elapsed()
+                    if paused || freshRemaining > 0 {
+                        _ = condition.wait(until: Date(timeIntervalSinceNow: paused ? 0.05 : min(0.05, freshRemaining)))
+                    }
+                }
+                condition.unlock()
             }
         }
+        onProgress?(PlaybackProgress(fraction: 1))
         condition.lock(); defer { condition.unlock() }
         return failed ? .failed : cancelled ? .cancelled : .complete
     }

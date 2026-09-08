@@ -42,7 +42,8 @@ extension TypingProfile {
             digraphs: stableDigraphs,
             confusions: confusions,
             createdAt: createdAt,
-            evidence: evidence
+            evidence: evidence,
+            trainingMode: trainingMode
         )
     }
 }
@@ -146,7 +147,8 @@ enum TypingEngine {
             dwellMedian: pick(\.dwellMedian), dwellMAD: pick(\.dwellMAD), backspaceRate: pick(\.backspaceRate),
             repairDelay: pick(\.repairDelay), detectionCharacters: pick(\.detectionCharacters), burstLength: pick(\.burstLength),
             punctuationPause: pick(\.punctuationPause), wordPause: pick(\.wordPause), digraphs: digraphs,
-            confusions: confusions, createdAt: Date(), evidence: evidence
+            confusions: confusions, createdAt: Date(), evidence: evidence,
+            trainingMode: samples.allSatisfy { $0.mode == samples.first?.mode } ? samples.first?.mode : nil
         )
     }
 
@@ -163,6 +165,8 @@ enum TypingEngine {
         let realism = settings.variation.isFinite ? min(1, max(0, settings.variation)) : 0.78
         let base = 12_000 / wpm
         let evidence = profile.evidence
+        let learnedContexts = settings.mode == .personal && settings.learnedPauses && profile.trainingMode != nil
+            ? (evidence?.pauseContexts ?? [:]).filter { $0.value.isSupported } : [:]
         let baselineDigraphs = TypingProfile.baseline().digraphs
         let empiricalCenter = median(evidence?.pairs.values.filter(\.isValid).map(\.interval) ?? [])
         let learnedScale = base / max(40, empiricalCenter > 0 ? empiricalCenter : profile.medianInterval)
@@ -180,6 +184,8 @@ enum TypingEngine {
         var burstRemaining = max(3, Int(profile.burstLength.rounded()))
         var previousCharacter = ""
         var motorDrift = 0.0
+        var pauseCandidates: [Int: PauseContext] = [:]
+        var cadencePause: PlannedPauseKind?
 
         func unit() -> Double { Double.random(in: 0..<1, using: &random) }
         func gaussian() -> Double {
@@ -200,6 +206,7 @@ enum TypingEngine {
         }
 
         func cadence(for character: String) -> TimingPair {
+            cadencePause = nil
             let pair = KeyboardTransition.digraph(previousCharacter, character) ?? ""
             let transition = KeyboardTransition.classify(previousCharacter, character)
             let factor = transition == "sameFinger" ? 1.16 : transition == "sameHand" ? 1.04 : 0.96
@@ -228,7 +235,10 @@ enum TypingEngine {
                 interval += (500 + unit() * 500) * boundaryScale
                 if unit() < 0.025 {
                     let pauseRoll = unit()
-                    interval += settings.extendedThoughtPauses ? 2_000 + pow(pauseRoll, 1.8) * 43_000 : 2_000 + pauseRoll * 3_000
+                    if learnedContexts[PauseContext.sentence.rawValue] == nil {
+                        interval += settings.extendedThoughtPauses ? 2_000 + pow(pauseRoll, 1.8) * 43_000 : 2_000 + pauseRoll * 3_000
+                        cadencePause = settings.extendedThoughtPauses ? .extendedThought : .thought
+                    }
                 }
             }
             if settings.fatigueDrift && sourceCharacterCount > 250 { interval *= 1 + Double(typedCharacters) / Double(sourceCharacterCount) * 0.09 }
@@ -240,6 +250,9 @@ enum TypingEngine {
         }
 
         func appendCharacter(_ character: String, speedMultiplier: Double = 1) {
+            if previousCharacter.first?.isLetter == true && character.first?.isLetter == true {
+                pauseCandidates[events.count] = .withinWord
+            }
             let timing = cadence(for: character)
             let dwell = bounded(profile.dwellMedian * exp(gaussian() * (0.08 + realism * 0.22)), 20, 250)
             if let last = events.indices.last, events[last].kind == .character {
@@ -249,23 +262,27 @@ enum TypingEngine {
             let priorDwell = events.last?.dwell ?? 0
             let flight = timing.interval * speedMultiplier - priorDwell
             let kind: PlannedEventKind = character == "\n" ? .enter : character == "\t" ? .tab : .character
-            events.append(PlannedEvent(kind: kind, value: character, flight: flight, dwell: dwell))
+            events.append(PlannedEvent(kind: kind, value: character, flight: flight, dwell: dwell, pauseKind: cadencePause))
             previousCharacter = character
             typedCharacters += 1
         }
 
         func appendKey(_ kind: PlannedEventKind, delay: Double) {
             let dwell = bounded(profile.dwellMedian * exp(gaussian() * 0.16), 20, 180)
-            events.append(PlannedEvent(kind: kind, flight: bounded(delay, 20, 8_000), dwell: dwell))
+            events.append(PlannedEvent(kind: kind, flight: bounded(delay, 20, 8_000), dwell: dwell, pauseKind: delay >= 1_000 ? .repair : nil))
             previousCharacter = "" // Corrections are not ordinary motor digraphs.
         }
 
-        let tokens = tokenize(text, sentencePauses: settings.sentencePauses)
+        let tokens = tokenize(text, sentencePauses: settings.sentencePauses || !learnedContexts.isEmpty)
         var sentencePauseEvents: [Int] = []
         var tokenIndex = 0
         while tokenIndex < tokens.count {
             if tokenIndex > 0 && tokens[tokenIndex - 1].endsSentence {
                 sentencePauseEvents.append(events.count)
+                pauseCandidates[events.count] = .sentence
+            } else if tokenIndex > 0 && tokens[tokenIndex - 1].text.allSatisfy(\.isWhitespace),
+                      !(tokenIndex >= 2 && tokens[tokenIndex - 2].endsSentence) {
+                pauseCandidates[events.count] = .word
             }
             let token = tokens[tokenIndex].text
             guard token.rangeOfCharacter(from: .letters) != nil, token.count >= 3 else {
@@ -387,10 +404,23 @@ enum TypingEngine {
 
         // Draw after typing/repair choices so changing the range cannot change
         // those choices. Wait after key release, independently of WPM and jitter.
+        for index in pauseCandidates.keys.sorted() where events.indices.contains(index) {
+            guard let context = pauseCandidates[index], let distribution = learnedContexts[context.rawValue] else { continue }
+            let baselineFrequency = context == .sentence && settings.thoughtPauses ? 0.025 : 0
+            if let wait = PauseLearning.draw(distribution, baselineFrequency: baselineFrequency,
+                                              decision: unit(), selection: unit(), length: unit()),
+               wait > events[index].flight {
+                events[index].flight = wait
+                events[index].pauseKind = .learned
+            }
+        }
         let pauseRange = settings.sentencePauseSeconds
-        for index in sentencePauseEvents where events.indices.contains(index) {
+        for index in sentencePauseEvents where settings.sentencePauses && events.indices.contains(index) {
             let seconds = Double(pauseRange.lowerBound) + unit() * Double(pauseRange.upperBound - pauseRange.lowerBound)
-            events[index].flight = max(events[index].flight, seconds * 1_000)
+            if seconds * 1_000 >= events[index].flight {
+                events[index].flight = seconds * 1_000
+                events[index].pauseKind = .sentence
+            }
         }
         let timeline = KeyTimeline.normalized(events)
         events = timeline.events

@@ -40,6 +40,7 @@ enum RunState: Equatable {
     case preparing
     case armed(Int)
     case typing
+    case paused
     case complete
     case stopped
     case error(String)
@@ -50,10 +51,16 @@ enum RunState: Equatable {
         case .preparing: return "Preparing"
         case .armed(let count): return "Armed · \(count)"
         case .typing: return "Typing"
+        case .paused: return "Paused"
         case .complete: return "Complete"
         case .stopped: return "Stopped"
         case .error: return "Needs attention"
         }
+    }
+
+    var isPlaybackActive: Bool { self == .typing || self == .paused }
+    var isBusy: Bool {
+        switch self { case .preparing, .armed, .typing, .paused: return true; default: return false }
     }
 }
 
@@ -75,6 +82,8 @@ struct TypingSettings: Codable, Equatable {
     var sentencePauses = false
     var sentencePauseMinimum = 2
     var sentencePauseMaximum = 10
+    var learnedPauses = true
+    var showTypingOverlay = true
     var fatigueDrift = true
 
     var sentencePauseSeconds: ClosedRange<Int> {
@@ -87,7 +96,7 @@ struct TypingSettings: Codable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case mode, wpm, variation, mistakeLevel, delayedRepairs, thoughtPauses, extendedThoughtPauses
-        case sentencePauses, sentencePauseMinimum, sentencePauseMaximum, fatigueDrift
+        case sentencePauses, sentencePauseMinimum, sentencePauseMaximum, fatigueDrift, learnedPauses, showTypingOverlay
     }
 
     init(from decoder: Decoder) throws {
@@ -102,6 +111,8 @@ struct TypingSettings: Codable, Equatable {
         sentencePauses = try values.decodeIfPresent(Bool.self, forKey: .sentencePauses) ?? false
         sentencePauseMinimum = try values.decodeIfPresent(Int.self, forKey: .sentencePauseMinimum) ?? 2
         sentencePauseMaximum = try values.decodeIfPresent(Int.self, forKey: .sentencePauseMaximum) ?? 10
+        learnedPauses = try values.decodeIfPresent(Bool.self, forKey: .learnedPauses) ?? true
+        showTypingOverlay = try values.decodeIfPresent(Bool.self, forKey: .showTypingOverlay) ?? true
         fatigueDrift = try values.decodeIfPresent(Bool.self, forKey: .fatigueDrift) ?? true
     }
 }
@@ -126,6 +137,7 @@ struct TypingProfile: Codable, Identifiable, Equatable {
     var createdAt: Date
     // Optional additions preserve decoding of every v1 profile.
     var evidence: TimingEvidence? = nil
+    var trainingMode: TrainingMode? = nil
 
     var isLegacy: Bool {
         id != Self.baselineID && sampleCount > 0 && evidence == nil
@@ -177,6 +189,30 @@ struct PlannedEvent: Codable, Equatable {
     /// Signed prior-key-release to this key press, in milliseconds.
     var flight: Double
     var dwell: Double
+    var pauseKind: PlannedPauseKind? = nil
+}
+
+enum PlannedPauseKind: String, Codable {
+    case sentence = "Sentence pause"
+    case thought = "Thought pause"
+    case extendedThought = "Extended thought pause"
+    case learned = "Learned pause"
+    case hesitation = "Hesitation"
+    case repair = "Correction"
+}
+
+struct PlaybackProgress: Equatable {
+    var fraction: Double = 0
+    var remaining: Double = 0
+    var waitRemaining: Double = 0
+    var pauseKind: PlannedPauseKind?
+    var isPaused = false
+    var canSkipWait: Bool { !isPaused && pauseKind != nil && waitRemaining > 0 }
+    var activity: String {
+        if isPaused { return "Paused" }
+        if let pauseKind, waitRemaining > 0 { return "\(pauseKind.rawValue) · \(String(format: "%.1f", waitRemaining)) s" }
+        return "Typing"
+    }
 }
 
 struct TypingPlan: Codable, Equatable {

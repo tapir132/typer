@@ -71,13 +71,36 @@ struct WorkspaceLayoutTests {
             model.settings.sentencePauses = false
             try await snapshot(RootView(model: model).systemSetup, name: "SystemSetup", size: NSSize(width: 500, height: 780))
             try await snapshot(PlaybackCheckView(), name: "PlaybackCheck-Ready", size: NSSize(width: 820, height: 730))
+            try await snapshot(PlaybackPreviewView(plan: model.previewPlan, text: model.sourceText),
+                               name: "PlaybackPreview-Ready", size: NSSize(width: 820, height: 690))
+            let pausedPlan = TypingPlan(events: [
+                PlannedEvent(kind: .character, value: "Hello.", flight: 0, dwell: 20),
+                PlannedEvent(kind: .character, value: " Next sentence.", flight: 10_000, dwell: 20, pauseKind: .sentence)
+            ], duration: 10_040, repairs: 0, effectiveWPM: 20)
+            let preview = PlaybackPreviewController(plan: pausedPlan, text: "Hello. Next sentence.")
+            preview.play()
+            try await Task.sleep(for: .milliseconds(150))
+            try await snapshot(PlaybackPreviewView(preview: preview), name: "PlaybackPreview-Wait", size: NSSize(width: 820, height: 690))
+            preview.stop()
+            let progress = PlaybackProgress(fraction: 0.35, remaining: 42, waitRemaining: 6.2, pauseKind: .sentence)
+            for paused in [false, true] {
+                try await snapshot(TypingOverlayContent(paused: paused, progress: progress, target: "TextEdit", message: nil),
+                                   name: "ScreenOverlay-\(paused ? "Paused" : "Typing")", size: NSSize(width: 1240, height: 800))
+            }
+            var coverage = TypingEngine.merge(samples: [freshSample, freshSample])
+            coverage.evidence?.pauseContexts = [
+                "word": PauseDistribution(opportunities: 80, pauseCount: 5, durations: [2_000, 3_000, 4_000], sessions: 2),
+                "sentence": PauseDistribution(opportunities: 10, pauseCount: 1, durations: [5_000], sessions: 1)
+            ]
+            try await snapshot(TrainingCoverageView(profile: coverage).padding(24),
+                               name: "TrainingCoverage", size: NSSize(width: 824, height: 400))
             var completed = freshSample
             completed.referenceCompleted = true
             try await snapshot(ValidationView(samples: Array(repeating: completed, count: 4)), name: "Validation-Overview", size: NSSize(width: 900, height: 690))
             try await snapshot(ValidationView(samples: [freshSample]), name: "Validation-Readiness", size: NSSize(width: 900, height: 690))
             for topic in GuideTopic.allCases {
                 model.guideTopic = topic
-                try await snapshot(AppGuideView(model: model), name: "Guide-\(topic.rawValue)", size: NSSize(width: 920, height: 1600))
+                try await snapshot(AppGuideView(model: model), name: "Guide-\(topic.rawValue)", size: NSSize(width: 920, height: 2600))
             }
         }
         model.profiles.add(sample: freshSample)
@@ -92,6 +115,17 @@ struct WorkspaceLayoutTests {
                 try await snapshot(RootView(model: model), name: "FiveSaved-OneUsed-\(section.rawValue)", size: NSSize(width: 920, height: 660))
             }
         }
+    }
+
+    @Test func typingOverlayCannotTakeKeyboardOrMouseFocus() {
+        _ = NSApplication.shared
+        let panel = TypingOverlayPanel(screenFrame: NSRect(x: -10_000, y: -10_000, width: 1240, height: 800))
+        defer { panel.close() }
+        #expect(!panel.canBecomeKey && !panel.canBecomeMain)
+        #expect(panel.ignoresMouseEvents && !panel.hidesOnDeactivate)
+        #expect(panel.styleMask.contains(.nonactivatingPanel))
+        #expect(panel.collectionBehavior.contains(.fullScreenAuxiliary))
+        #expect(panel.level == .statusBar)
     }
 
     private func snapshot<Content: View>(_ view: Content, name: String, size: NSSize) async throws {

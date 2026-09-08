@@ -10,7 +10,11 @@ final class AppModel: ObservableObject {
         didSet { schedulePreviewRefresh() }
     }
     @Published var settings = TypingSettings() {
-        didSet { schedulePreviewRefresh() }
+        didSet {
+            preferences.save(settings)
+            controller.overlayEnabled = settings.showTypingOverlay
+            schedulePreviewRefresh()
+        }
     }
     @Published var trainingMode: TrainingMode = .copy
     @Published var showsSystemSetup = false
@@ -20,6 +24,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var previewPlan = TypingPlan(events: [], duration: 0, repairs: 0, effectiveWPM: 0)
 
     let profiles: ProfileStore
+    let preferences: SettingsStore
     let controller = TypingController()
     let liveCapture = GlobalTrainingCapture()
     private var previewTask: Task<Void, Never>?
@@ -28,6 +33,9 @@ final class AppModel: ObservableObject {
 
     init(profileStore: ProfileStore? = nil) {
         profiles = profileStore ?? ProfileStore()
+        preferences = SettingsStore(defaults: profiles.defaults)
+        settings = preferences.settings
+        controller.overlayEnabled = settings.showTypingOverlay
         if CommandLine.arguments.contains("--train") { section = .train }
         if CommandLine.arguments.contains("--profiles") { section = .profiles }
         if CommandLine.arguments.contains("--live-capture") {
@@ -50,6 +58,7 @@ final class AppModel: ObservableObject {
     }
 
     func arm() {
+        guard !controller.state.isBusy else { return }
         guard !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !liveCapture.isCapturing else {
             showToast("Stop Live capture before starting playback.")
@@ -67,6 +76,8 @@ final class AppModel: ObservableObject {
             controller.start(text: sourceText, settings: playbackSettings, profile: playbackProfile)
         }
     }
+
+    var isPreviewReady: Bool { previewAppliedRevision == previewRevision && !previewPlan.events.isEmpty }
 
     func requestAccessibilityPermission() {
         // Match Dictation's documented trust prompt. Publishing the result after

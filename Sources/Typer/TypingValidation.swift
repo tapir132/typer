@@ -25,6 +25,22 @@ struct TraceComparison: Codable, Equatable {
     var candidateObservedPairs: Int
     var referenceMissingHolds: Int
     var candidateMissingHolds: Int
+    var pauseRates: [PauseRateComparison]? = nil
+}
+
+struct PauseRateComparison: Codable, Equatable {
+    var name: String
+    var referenceOpportunities: Int?
+    var referencePauses: Int?
+    var candidateOpportunities: Int?
+    var candidatePauses: Int?
+
+    var referenceFrequency: Double? { frequency(referencePauses, referenceOpportunities) }
+    var candidateFrequency: Double? { frequency(candidatePauses, candidateOpportunities) }
+    private func frequency(_ pauses: Int?, _ opportunities: Int?) -> Double? {
+        guard let pauses, let opportunities, opportunities > 0 else { return nil }
+        return min(1, max(0, Double(pauses) / Double(opportunities)))
+    }
 }
 
 struct ValidationTrial: Codable, Equatable {
@@ -39,7 +55,7 @@ struct ValidationTrial: Codable, Equatable {
 
 struct ValidationReport: Codable, Equatable {
     var schemaVersion = 2
-    var modelVersion = "paired-timing-v2"
+    var modelVersion = "paired-timing-v3-context-pauses"
     var createdAt: Date
     var context: String
     var eligibleSessions: Int
@@ -118,6 +134,10 @@ enum TypingValidation {
         add("Burst length (< 310 ms)", reference.burstLengths, candidate.burstLengths, unit: "keys")
         add("Deletion run", reference.deletionRuns, candidate.deletionRuns, unit: "actions")
         add("Pre-deletion interval", reference.repairLatencies, candidate.repairLatencies)
+        for context in PauseContext.allCases {
+            add("Pause: \(context.label)", reference.pauseContexts?[context.rawValue]?.validDurations ?? [],
+                candidate.pauseContexts?[context.rawValue]?.validDurations ?? [])
+        }
         for key in ["sameFinger", "sameHand", "alternatingHands", "other"] {
             add("QWERTY \(key)", reference.transitions[key]?.values.map(\.interval) ?? [], candidate.transitions[key]?.values.map(\.interval) ?? [])
         }
@@ -133,7 +153,12 @@ enum TypingValidation {
             referenceAutocorrelation: reference.intervalAutocorrelation, candidateAutocorrelation: candidate.intervalAutocorrelation,
             referenceEditsPerCharacter: rate(reference), candidateEditsPerCharacter: rate(candidate),
             referenceObservedPairs: reference.pairs.count, candidateObservedPairs: candidate.pairs.count,
-            referenceMissingHolds: reference.missingDwellCount, candidateMissingHolds: candidate.missingDwellCount)
+            referenceMissingHolds: reference.missingDwellCount, candidateMissingHolds: candidate.missingDwellCount,
+            pauseRates: PauseContext.allCases.map { context in
+                let a = reference.pauseContexts?[context.rawValue], b = candidate.pauseContexts?[context.rawValue]
+                return PauseRateComparison(name: context.label, referenceOpportunities: a?.opportunities,
+                    referencePauses: a?.pauseCount, candidateOpportunities: b?.opportunities, candidatePauses: b?.pauseCount)
+            })
     }
 
     static func eligibleSamples(_ samples: [TrainingSample], mode: TrainingMode?) -> [TrainingSample] {
@@ -154,6 +179,7 @@ enum TypingValidation {
                 "This evaluates planned timelines. Application delivery and realized OS timing require a separate receiver check."
             ], trials: [], humanToHuman: nil)
         report.limitations.append("Overview rows report median W1 and range across paired Natural/My rhythm trials with the same session, seed and WPM. Seeds share human sessions; they are not independent human replicates.")
+        report.limitations.append("Contextual pauses use the longest valid key-up-to-next-press idle across a punctuation/space boundary, or an adjacent letter pair. The 1-second cutoff and support gates are engineering choices. Older samples without these summaries remain usable, with these metrics unavailable.")
         guard eligible.count >= 4 else { return report }
         let split = eligible.count - 2
         let training = Array(eligible.prefix(split).suffix(5))
@@ -190,7 +216,7 @@ enum TypingValidation {
         let natural = trials.filter { $0.mode == TypingSettings.Mode.natural.rawValue }
         let personal = trials.filter { $0.mode == TypingSettings.Mode.personal.rawValue }
         let names = ["Key hold", "Press interval", "Signed flight", "Overlap duration", "Pause ≥ 1 s",
-                     "Burst length (< 310 ms)", "Deletion run", "Pre-deletion interval"]
+                     "Burst length (< 310 ms)", "Deletion run", "Pre-deletion interval"] + PauseContext.allCases.map { "Pause: \($0.label)" }
         return names.map { name in
             var a: [Double] = [], b: [Double] = []
             var unit = "ms"
