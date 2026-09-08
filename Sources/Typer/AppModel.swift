@@ -6,6 +6,7 @@ import Foundation
 final class AppModel: ObservableObject {
     @Published var section: AppSection = .compose
     @Published var guideTopic: GuideTopic = .firstRun
+    @Published var settingsSection: SettingsSection = .general
     @Published var sourceText = "Hey — quick update. I finished the first pass and pushed the changes. There are still a couple of rough edges, but the core flow is working really well now." {
         didSet { schedulePreviewRefresh() }
     }
@@ -17,7 +18,7 @@ final class AppModel: ObservableObject {
         }
     }
     @Published var trainingMode: TrainingMode = .copy
-    @Published var showsSystemSetup = false
+    @Published var showsSettings = false
     @Published var toast: String?
     @Published private(set) var accessibilityAuthorized = false
     @Published private(set) var inputMonitoringAuthorized = false
@@ -54,7 +55,13 @@ final class AppModel: ObservableObject {
 
     func showGuide(_ topic: GuideTopic) {
         guideTopic = topic
-        section = .guide
+        settingsSection = .guide
+        showsSettings = true
+    }
+
+    func showSettings() {
+        settingsSection = .general
+        showsSettings = true
     }
 
     func arm() {
@@ -66,7 +73,7 @@ final class AppModel: ObservableObject {
         }
         refreshPermissions()
         if !accessibilityAuthorized {
-            showsSystemSetup = true
+            showSettings()
             requestAccessibilityPermission()
             return
         }

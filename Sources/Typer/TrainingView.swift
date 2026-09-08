@@ -10,7 +10,6 @@ struct TrainingView: View {
     @State private var startedAt: Double?
     @State private var lastMistakeAt: Double?
     @State private var activePresses: [UInt16: UUID] = [:]
-    @State private var showsTrainingGuide = false
 
     private let passages = [
         "The tiny bookstore stayed open after midnight, its windows glowing against the rain. I stepped inside for five minutes and left an hour later with three novels and a new favorite place.",
@@ -30,13 +29,9 @@ struct TrainingView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("Teach it your rhythm.").font(.system(size: 27, weight: .semibold)).tracking(-0.5)
-                    Text("Type naturally—correct mistakes, pause, and change your mind like you normally would.").font(.system(size: 13)).foregroundStyle(TyperTheme.mutedStrong)
+                    Text("Type naturally, including your usual pauses and corrections.").font(.system(size: 13)).foregroundStyle(TyperTheme.mutedStrong)
                 }
                 Spacer()
-                Button { model.guideTopic = .training; showsTrainingGuide = true } label: {
-                    Label("How training works", systemImage: "questionmark.circle")
-                }
-                .buttonStyle(QuietButtonStyle())
                 HStack(alignment: .top, spacing: 5) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(profiles.samples.count) saved samples total")
@@ -72,8 +67,6 @@ struct TrainingView: View {
         .onChange(of: model.trainingMode) { _, newMode in
             if newMode != .liveCapture { reset(changePassage: false) }
         }
-        .sheet(isPresented: $showsTrainingGuide) { AppGuideSheet(model: model) }
-        .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in showsTrainingGuide = false }
     }
 
     private var mode: TrainingMode { model.trainingMode }
@@ -185,8 +178,14 @@ struct TrainingView: View {
 
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "lock.shield.fill").foregroundStyle(TyperTheme.signal)
-                Text("Opt-in session only. Typer never blocks or rewrites the target app's events. Raw keystrokes exist only in memory while recording and are discarded when you stop; only timing statistics are saved.")
+                Text("Records only when you start it. Raw keystrokes are discarded when you stop; saved statistics stay on this Mac.")
                     .font(.system(size: 10)).foregroundStyle(TyperTheme.mutedStrong).lineSpacing(3)
+            }
+
+            HStack(spacing: 4) {
+                Text("Best for active writing · 15-minute limit")
+                    .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
+                HelpTip(title: "Idle gaps in Live capture", text: QuickHelp.liveCaptureGaps)
             }
 
             if let notice = liveCapture.notice {
@@ -356,7 +355,7 @@ struct TrainingView: View {
     private func startLiveCapture() {
         model.refreshPermissions()
         guard model.inputMonitoringAuthorized else {
-            model.showsSystemSetup = true
+            model.showSettings()
             model.requestInputMonitoringPermission()
             model.showToast("Allow Input Monitoring, then start Live capture again.")
             return

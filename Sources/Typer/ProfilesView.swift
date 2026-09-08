@@ -16,7 +16,7 @@ struct ProfilesView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("Typing fingerprints.").font(.system(size: 27, weight: .semibold)).tracking(-0.5)
-                    Text("Each profile carries its own dwell, flight, cadence, error habits, and correction reflexes.").font(.system(size: 13)).foregroundStyle(TyperTheme.mutedStrong)
+                    Text("Choose the timing and correction habits Typer uses.").font(.system(size: 13)).foregroundStyle(TyperTheme.mutedStrong)
                 }
                 Spacer()
                 Button("Validate rhythm") { showsValidation = true }.buttonStyle(SecondaryButtonStyle())
@@ -49,10 +49,6 @@ struct ProfilesView: View {
                 TrainingCoverageView(profile: profiles.activeProfile).padding(.vertical, 14)
             }
             .font(.system(size: 12, weight: .medium)).padding(.top, 18)
-            Button { model.showGuide(.measurements) } label: {
-                Label("Understand these measurements and validate a profile", systemImage: "questionmark.circle")
-            }
-            .buttonStyle(QuietButtonStyle()).padding(.top, 14)
             HStack(spacing: 4) {
                 Button { showsPlaybackCheck = true } label: {
                     Label("Check playback on this Mac", systemImage: "keyboard")

@@ -57,6 +57,10 @@ struct TyperApp: App {
                     .disabled(!updateManager.canCheckForUpdates)
             }
             TypingCommands(model: model, controller: model.controller)
+            CommandGroup(replacing: .appSettings) {
+                Button("Settings…") { model.showSettings() }
+                    .keyboardShortcut(",", modifiers: .command)
+            }
             CommandGroup(replacing: .help) {
                 Button("Typer Guide") { model.showGuide(.firstRun) }
                     .keyboardShortcut("?", modifiers: .command)

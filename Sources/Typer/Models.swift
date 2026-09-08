@@ -4,6 +4,11 @@ enum AppSection: String, CaseIterable, Identifiable {
     case compose = "Compose"
     case train = "Train"
     case profiles = "Profiles"
+    var id: String { rawValue }
+}
+
+enum SettingsSection: String, CaseIterable, Identifiable {
+    case general = "General"
     case guide = "Guide"
     var id: String { rawValue }
 }

@@ -34,11 +34,13 @@ Pause releases held keys and freezes the run's clock. Resume continues from that
 
 Compose remembers controls across launches. The **Preset** menu includes Quick messages, Long-form writing and Clean copy. **Save…** stores a named setup; up to 30 personal presets can be kept and removed from the menu. Presets save controls, including the overlay, but never source text or a learned-profile selection.
 
-Open **Guide** in the top navigation or **Help → Typer Guide** for first-run steps, controls, training, measurement definitions, validation, permissions, updates, and troubleshooting. Small **?** icons beside controls and statistics show a quick explanation on hover; click one to keep the explanation open. **Train → How training works** opens the guide in a sheet so you can read it without leaving your current exercise.
+Open the gear (or press **⌘,**) for **Settings → Guide**, or use **Help → Typer Guide**. Short topic-based answers cover first runs, controls, training, measurements, validation, privacy, and updates, with extra details folded away. Hover or click a small **?** beside a control for quick help. Opening Settings preserves your current workspace and unfinished training exercise.
 
 Use **Train** in three ways: **Copy** learns exact errors and digraphs, **Freewrite** learns organic thought pauses, and **Sprint** learns fast bursts and recovery reflexes. The profiler measures dwell time, flight time, press-to-press digraph latency, timing variation, burst length, correction rate, detection delay, repair latency, and recurring substitutions. Profiles and samples stay in macOS user defaults on this Mac.
 
 **Live capture** is an optional fourth mode for learning while you write in Google Docs or another application. It uses a listen-only event tap, never intercepts or delays the target application's input, pauses while macOS Secure Input is enabled, stops automatically after 15 minutes, and discards raw keystrokes when the session ends. Only derived timing and correction statistics are saved. Live capture requires the separate macOS **Input Monitoring** permission and never starts without an explicit click.
+
+Live capture is intended for active writing sessions and stops after 15 minutes. Long idle gaps are excluded from motor timing measurements, but still reduce measured WPM; gaps up to a minute may be learned as pauses. It is not an hour-long background activity recorder.
 
 ### Mistakes and corrections during training
 
@@ -80,7 +82,7 @@ The report provides median/MAD, KS and Wasserstein distances, rollover, autocorr
 
 ### Local builds and update results
 
-System setup shows the running build's origin and, for local builds, its build date and whether it includes unpublished changes. **Check now** reports whether a newer compatible published build exists, including the latest published version when available and the check time. Network and verification failures remain visible.
+Settings → General shows the running build's origin and, for local builds, its build date and whether it includes unpublished changes. **Check now** reports whether a newer compatible published build exists, including the latest published version when available and the check time. Network and verification failures remain visible.
 
 Checking and downloading do not require a restart. Automatic checks continue every six hours while Typer is open, and **Check now** checks immediately. Installing new app code requires a relaunch; Sparkle's update prompt handles installation and relaunching. Save unfinished training and copy any source text you want to keep before installing.
 

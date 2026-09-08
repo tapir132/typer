@@ -31,7 +31,6 @@ struct RootView: View {
                             case .compose: ComposeView(model: model)
                             case .train: TrainingView(model: model)
                             case .profiles: ProfilesView(model: model)
-                            case .guide: AppGuideView(model: model)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -60,9 +59,9 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: model.toast)
-        .sheet(isPresented: $model.showsSystemSetup) { systemSetup }
+        .sheet(isPresented: $model.showsSettings) { SettingsView(model: model) }
         .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in
-            model.showsSystemSetup = false
+            model.showsSettings = false
             model.controller.stop()
         }
         .onAppear { updates.start() }
@@ -127,10 +126,10 @@ struct RootView: View {
                     Circle().fill(statusColor).frame(width: 7, height: 7)
                     Text(controller.state.label).font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.mutedStrong)
                 }
-                Button { model.showsSystemSetup = true } label: { Image(systemName: "gearshape").font(.system(size: 13)) }
+                Button { model.showSettings() } label: { Image(systemName: "gearshape").font(.system(size: 13)) }
                     .buttonStyle(QuietButtonStyle())
-                    .help("System setup, permissions, and updates")
-                    .accessibilityLabel("System setup")
+                    .help("Settings, guide, permissions, and updates")
+                    .accessibilityLabel("Settings")
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -205,150 +204,6 @@ struct RootView: View {
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
-
-    var systemSetup: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("System setup").font(.system(size: 20, weight: .semibold))
-                        Text("Permissions for cross-app typing and optional Live capture.").font(.system(size: 12)).foregroundStyle(TyperTheme.mutedStrong)
-                    }
-                    Spacer()
-                    Button("Done") { model.showsSystemSetup = false }.buttonStyle(QuietButtonStyle()).keyboardShortcut(.cancelAction)
-                }
-                HStack(spacing: 12) {
-                    Image(systemName: model.accessibilityAuthorized ? "checkmark.shield.fill" : "exclamationmark.shield.fill")
-                        .foregroundStyle(model.accessibilityAuthorized ? TyperTheme.signal : TyperTheme.danger)
-                        .font(.system(size: 22))
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 4) {
-                            Text("Accessibility permission").font(.system(size: 13, weight: .semibold))
-                            HelpTip(title: "Accessibility permission", text: QuickHelp.accessibility)
-                        }
-                        Text(model.accessibilityAuthorized ? "Enabled" : "Required before the first run").font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
-                    }
-                    Spacer()
-                }
-                .padding(15).typerSurface(radius: 10)
-                HStack(spacing: 12) {
-                    Image(systemName: model.inputMonitoringAuthorized ? "checkmark.shield.fill" : "waveform.badge.exclamationmark")
-                        .foregroundStyle(model.inputMonitoringAuthorized ? TyperTheme.signal : TyperTheme.mutedStrong)
-                        .font(.system(size: 22))
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 4) {
-                            Text("Input Monitoring").font(.system(size: 13, weight: .semibold))
-                            HelpTip(title: "Input Monitoring", text: QuickHelp.inputMonitoring)
-                        }
-                        Text(model.inputMonitoringAuthorized ? "Enabled for opt-in Live capture" : "Optional · required only for Live capture")
-                            .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
-                    }
-                    Spacer()
-                }
-                .padding(15).typerSurface(radius: 10)
-                HStack(spacing: 10) {
-                    Button(model.accessibilityAuthorized ? "Permission enabled" : "Request permission") {
-                        model.requestAccessibilityPermission()
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.accessibilityAuthorized)
-                    Button("Open System Settings") { controller.openAccessibilitySettings() }.buttonStyle(SecondaryButtonStyle())
-                }
-                .frame(maxWidth: .infinity)
-                HStack(spacing: 10) {
-                    Button(model.inputMonitoringAuthorized ? "Input Monitoring enabled" : "Allow Live capture") {
-                        model.requestInputMonitoringPermission()
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .disabled(model.inputMonitoringAuthorized)
-                    Button("Open Input Monitoring") { model.openInputMonitoringSettings() }.buttonStyle(QuietButtonStyle())
-                }
-                Text("Accessibility lets Typer play keys. Input Monitoring is separate, optional, and only used during a Live capture session. All learned data stays on this Mac.")
-                    .font(.system(size: 10)).foregroundStyle(TyperTheme.muted).lineSpacing(3)
-
-                Rectangle().fill(TyperTheme.line).frame(height: 1).padding(.vertical, 2)
-
-                Text("Updates").font(.system(size: 15, weight: .semibold))
-                SettingsToggleRow(
-                    title: "Check automatically",
-                    detail: "Checks at launch and every six hours for published updates.",
-                    explanation: QuickHelp.checking,
-                    isOn: $updates.automaticallyChecks
-                )
-                SettingsToggleRow(
-                    title: "Install automatically",
-                    detail: "Downloads and installs verified updates when available.",
-                    explanation: QuickHelp.installation,
-                    isEnabled: updates.automaticallyChecks,
-                    isOn: $updates.automaticallyDownloads
-                )
-
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Typer \(updates.build.version)")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text(updates.build.originLabel)
-                            .font(.system(size: 10)).foregroundStyle(TyperTheme.mutedStrong)
-                        if let builtAt = updates.build.builtAt {
-                            Text("Built \(builtAt.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.system(size: 9)).foregroundStyle(TyperTheme.muted)
-                        }
-                    }
-                    Spacer()
-                    Button(updates.checkSummary.isChecking ? "Checking…" : "Check now") { updates.checkForUpdates() }.buttonStyle(SecondaryButtonStyle()).disabled(!updates.canCheckForUpdates)
-                }
-
-                HStack(spacing: 4) {
-                    Text("Update channel").font(.system(size: 11, weight: .medium))
-                    HelpTip(title: "Update channel", text: QuickHelp.channel)
-                }
-                Picker("Update channel", selection: $updates.channel) {
-                    ForEach(UpdateChannel.allCases) { channel in Text(channel.title).tag(channel) }
-                }
-                .pickerStyle(.segmented).labelsHidden()
-                .disabled(updates.checkSummary.isChecking)
-
-                Text("Check now works while Typer is open. Installing new app code requires a relaunch; the update prompt can handle that for you.")
-                    .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(updates.build.isLocal
-                     ? "This app was built on this Mac. Local edits appear after rebuilding and relaunching Typer; the updater checks published builds only."
-                     : updates.channel == .stable ? "Release delivers tested, versioned releases." : "Edge delivers builds published after a successful push to main.")
-                    .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong).fixedSize(horizontal: false, vertical: true)
-
-                if let message = updates.checkSummary.message, updates.lastError == nil {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(message).font(.system(size: 11, weight: .medium))
-                        if let version = updates.checkSummary.publishedVersion {
-                            Text("Latest published: \(version)").font(.system(size: 10)).foregroundStyle(TyperTheme.mutedStrong)
-                        }
-                        if let checkedAt = updates.checkSummary.checkedAt {
-                            Text("Last checked \(checkedAt.formatted(date: .abbreviated, time: .shortened))")
-                                .font(.system(size: 10)).foregroundStyle(TyperTheme.muted)
-                        }
-                    }
-                }
-
-                if let updateError = updates.lastError {
-                    Text("Update failed: \(updateError)")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(TyperTheme.danger)
-                        .textSelection(.enabled)
-                        .lineLimit(4)
-                }
-            }
-            .padding(26)
-        }
-        .frame(width: 500, height: min(780, (NSScreen.main?.visibleFrame.height ?? 860) - 80))
-        .background(TyperTheme.background)
-        .task {
-            while !Task.isCancelled {
-                model.refreshPermissions()
-                try? await Task.sleep(for: .seconds(1))
-            }
-        }
-    }
 }
 
 private struct RhythmMark: View {
@@ -359,34 +214,5 @@ private struct RhythmMark: View {
             Capsule().fill(TyperTheme.primary).frame(width: 4, height: 13)
         }
         .frame(width: 18, height: 20)
-    }
-}
-
-struct SettingsToggleRow: View {
-    let title: String
-    let detail: String
-    let explanation: String
-    var isEnabled = true
-    @Binding var isOn: Bool
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 18) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Text(title).font(.system(size: 12, weight: .semibold))
-                    HelpTip(title: title, text: explanation)
-                }
-                Text(detail).font(.system(size: 10)).foregroundStyle(TyperTheme.mutedStrong)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle(title, isOn: $isOn)
-                .labelsHidden().toggleStyle(.switch).controlSize(.small).tint(TyperTheme.primary)
-                .disabled(!isEnabled)
-                .fixedSize()
-                .accessibilityLabel(title)
-                .help(detail)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

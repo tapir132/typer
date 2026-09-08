@@ -39,11 +39,7 @@ struct ComposeView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 7) {
                 Text("What should I type?").font(.system(size: 27, weight: .semibold)).tracking(-0.5)
-                Text("Paste the finished text. Typer will perform the messy middle.").font(.system(size: 13)).foregroundStyle(TyperTheme.mutedStrong)
-                Button { model.showGuide(.firstRun) } label: {
-                    Label("How to use Typer", systemImage: "questionmark.circle")
-                        .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
-                }.buttonStyle(.plain).padding(.top, 3)
+                Text("Paste your text, choose a rhythm, then arm typing.").font(.system(size: 13)).foregroundStyle(TyperTheme.mutedStrong)
             }
             Spacer()
             HStack(spacing: 10) {
@@ -116,7 +112,7 @@ struct ComposeView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Performance").font(.system(size: 12, weight: .semibold))
-                HelpTip(title: "Performance", text: "Choose a timing source, then adjust speed, variation, and corrections. Guide → Modes & controls explains how the settings work together.")
+                HelpTip(title: "Performance", text: "Natural uses built-in timing. Clean skips mistakes. My rhythm uses your active profile.")
                 Spacer()
                 Text("\(Int((model.settings.variation * 100).rounded()))% variation").font(.system(size: 9, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.signal)
             }
@@ -139,7 +135,7 @@ struct ComposeView: View {
                 .frame(maxWidth: .infinity).padding(.top, 9)
 
             controlGroup {
-                compactToggle("Fullscreen typing overlay", note: "Red tint with large pause shortcuts", help: "Shows a translucent red overlay on every screen while typing, with pause/resume, skip and stop shortcuts. The overlay does not take focus and clicks pass through it. Turn this off for an unobscured view of the target app.", binding: $model.settings.showTypingOverlay)
+                compactToggle("Fullscreen typing overlay", note: "Red tint with large pause shortcuts", help: "Shows a red tint and large shortcut reminders while typing. Clicks pass through. Turn off to keep your screen clear; shortcuts still work.", binding: $model.settings.showTypingOverlay)
             }
 
             controlGroup { PresetControls(model: model) }
@@ -195,7 +191,7 @@ struct ComposeView: View {
             VStack(spacing: 5) {
                 compactToggle("Delayed repairs", note: "Notice errors a word or two later", help: "Lets some generated errors remain for a few characters before Typer returns to correct them. This has no effect when generated mistakes are disabled.", binding: $model.settings.delayedRepairs)
                 compactToggle("Thought pauses", note: "Occasional 2–5 second stalls", help: "Adds occasional thinking pauses of about 2–5 seconds. Pauses are included in the estimate, and Stop remains available during them.", binding: $model.settings.thoughtPauses)
-                compactToggle("Learned pause habits", note: "My rhythm · uses recorded boundaries", help: "Uses recorded pause frequency and length for word, sentence and within-word contexts. Requires My rhythm and sufficient new evidence; sparse contexts keep the usual cadence. Profiles → Training coverage shows what is available.", isEnabled: model.isUsingLearnedProfile && !profiles.activeProfile.isLegacy, binding: $model.settings.learnedPauses)
+                compactToggle("Learned pause habits", note: "My rhythm · uses recorded boundaries", help: "Uses your recorded pauses when enough training is available. Requires My rhythm. See Profiles → Training coverage for readiness.", isEnabled: model.isUsingLearnedProfile && !profiles.activeProfile.isLegacy, binding: $model.settings.learnedPauses)
                 compactToggle("Extended thought pauses", note: "2.5% per sentence end · 2–45 seconds", help: "Allows a longer 2–45 second pause with a 2.5% chance at each eligible sentence ending. Requires Thought pauses; short text may not contain a long pause.", isEnabled: model.settings.thoughtPauses, binding: $model.settings.extendedThoughtPauses)
                 compactToggle("Sentence pauses", note: "\(model.settings.sentencePauseMinimum)–\(model.settings.sentencePauseMaximum) seconds · every sentence", help: QuickHelp.sentencePauses, binding: $model.settings.sentencePauses)
                 if model.settings.sentencePauses {
@@ -218,7 +214,7 @@ struct ComposeView: View {
                     .font(.system(size: 10)).controlSize(.mini)
                     .padding(.top, 2).padding(.bottom, 7)
                 }
-                compactToggle("Fatigue drift", note: "Cadence evolves over long runs", help: "Gradually changes the cadence as a run progresses instead of maintaining one pace from start to finish. It does not change the intended final text.", binding: $model.settings.fatigueDrift)
+                compactToggle("Fatigue drift", note: "Cadence evolves over long runs", help: "Gradually changes the pace during a run.", binding: $model.settings.fatigueDrift)
             }
             .padding(.vertical, 10)
         }

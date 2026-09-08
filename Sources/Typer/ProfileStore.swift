@@ -44,13 +44,7 @@ final class ProfileStore: ObservableObject {
     var currentSampleCount: Int { samples.count - legacySampleCount }
 
     var sampleUsageExplanation: String {
-        var parts = ["A sample is one recorded typing session. A profile is built from selected samples."]
-        parts.append("You have \(samples.count) saved samples: \(currentSampleCount) current and \(legacySampleCount) Legacy. The active profile was built from \(activeProfile.sampleCount).")
-        parts.append("Saving a sample rebuilds My rhythm from up to five recent samples in that same mode.")
-        if legacySampleCount > 0 {
-            parts.append("Legacy profiles are locked for training and kept separately for playback. New samples never change them.")
-        }
-        return parts.joined(separator: " ")
+        "A sample is one session. My rhythm uses up to five recent samples in one mode. Saved total includes older and Legacy sessions; Legacy profiles stay separate."
     }
 
     var unusedOlderSamplesNote: String? {

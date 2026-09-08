@@ -69,7 +69,7 @@ struct WorkspaceLayoutTests {
             model.section = .compose
             try await snapshot(RootView(model: model), name: "SentencePauses", size: NSSize(width: 1240, height: 900))
             model.settings.sentencePauses = false
-            try await snapshot(RootView(model: model).systemSetup, name: "SystemSetup", size: NSSize(width: 500, height: 780))
+            try await snapshot(SettingsView(model: model), name: "Settings-General", size: NSSize(width: 800, height: SettingsView.height))
             try await snapshot(PlaybackCheckView(), name: "PlaybackCheck-Ready", size: NSSize(width: 820, height: 730))
             try await snapshot(PlaybackPreviewView(plan: model.previewPlan, text: model.sourceText),
                                name: "PlaybackPreview-Ready", size: NSSize(width: 820, height: 690))
@@ -99,9 +99,14 @@ struct WorkspaceLayoutTests {
             try await snapshot(ValidationView(samples: Array(repeating: completed, count: 4)), name: "Validation-Overview", size: NSSize(width: 900, height: 690))
             try await snapshot(ValidationView(samples: [freshSample]), name: "Validation-Readiness", size: NSSize(width: 900, height: 690))
             for topic in GuideTopic.allCases {
+                model.settingsSection = .guide
                 model.guideTopic = topic
-                try await snapshot(AppGuideView(model: model), name: "Guide-\(topic.rawValue)", size: NSSize(width: 920, height: 2600))
+                try await snapshot(SettingsView(model: model), name: "Settings-Guide-\(topic.rawValue)", size: NSSize(width: 800, height: SettingsView.height))
             }
+            model.section = .train
+            model.trainingMode = .liveCapture
+            try await snapshot(RootView(model: model), name: "LiveCapture-IdleHelp", size: NSSize(width: 1240, height: 800))
+            model.trainingMode = .copy
         }
         model.profiles.add(sample: freshSample)
         let reloaded = ProfileStore(defaults: defaults)
@@ -115,6 +120,46 @@ struct WorkspaceLayoutTests {
                 try await snapshot(RootView(model: model), name: "FiveSaved-OneUsed-\(section.rawValue)", size: NSSize(width: 920, height: 660))
             }
         }
+    }
+
+    @Test func settingsGuidePreservesTheUnfinishedTrainingEditor() async throws {
+        _ = NSApplication.shared
+        let suite = "typer.guide.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = AppModel(profileStore: ProfileStore(defaults: defaults))
+        model.section = .train
+        model.trainingMode = .freewrite
+        let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 1240, height: 800),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: RootView(model: model))
+        host.sizingOptions = []
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.close() }
+        try await Task.sleep(for: .milliseconds(100))
+        let editor = try #require(trainingEditor(in: host))
+        editor.insertText("An unfinished practice sentence.", replacementRange: NSRange(location: 0, length: 0))
+        try await Task.sleep(for: .milliseconds(100))
+
+        model.showGuide(.training)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(model.section == .train)
+        #expect(window.attachedSheet != nil)
+        model.guideTopic = .privacy
+        model.settingsSection = .general
+        model.showsSettings = false
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(trainingEditor(in: host) === editor)
+        #expect(editor.string == "An unfinished practice sentence.")
+        #expect(model.trainingMode == .freewrite)
+        #expect(model.profiles.samples.isEmpty)
+    }
+
+    private func trainingEditor(in view: NSView) -> CapturingNSTextView? {
+        if let editor = view as? CapturingNSTextView { return editor }
+        return view.subviews.lazy.compactMap { trainingEditor(in: $0) }.first
     }
 
     @Test func typingOverlayCannotTakeKeyboardOrMouseFocus() {
