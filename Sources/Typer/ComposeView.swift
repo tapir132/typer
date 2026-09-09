@@ -176,9 +176,12 @@ struct ComposeView: View {
             }
 
             controlGroup {
-                controlHeader("Human variation", value: "\(Int(model.settings.variation * 100))%", help: QuickHelp.variation)
+                controlHeader("Timing variation", value: "\(Int(model.settings.variation * 100))%", help: QuickHelp.variation)
                 Slider(value: $model.settings.variation, in: 0...1, step: 0.01).tint(TyperTheme.primary)
-                Text("Shapes dwell, flight, bursts, and hesitation—not the final text.").controlNote()
+                    .accessibilityLabel("Timing variation")
+                    .accessibilityValue("\(Int(model.settings.variation * 100)) percent; lower is steadier, higher is more varied")
+                HStack { Text("Steadier"); Spacer(); Text("More varied") }.rangeLabels()
+                Text("Lower: more even pacing. Higher: more bursts and brief hesitations.").controlNote()
             }
 
             controlGroup {

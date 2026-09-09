@@ -39,7 +39,7 @@ enum QuickHelp {
     static let measuredSpeed = "Recorded pace in five-character words per minute, including pauses and editing. Idle gaps lower this number."
     static let activeSpeed = "Pace during continuous typing, including deletions. Gaps over 2.5 seconds and activity breaks are excluded. The session timer includes all elapsed time; other live timing measurements show recent keys."
     static let profileSpeed = "Pace learned from this profile's samples. The Compose speed slider sets your playback target."
-    static let variation = "Changes the spread in timing and hesitation. This is a setting, not a realism score; mistakes have their own control."
+    static let variation = "Lower keeps the pace more even. Higher adds bigger timing changes, quick bursts, and brief hesitations. Even 0% keeps some natural or learned variation. This isn't a human score; speed, mistakes, and long pauses have separate controls."
     static let mistakes = "How often Typer makes and repairs errors. Clean disables them; the preview shows the planned repair count."
     static let dwell = "How long a key is held down, in milliseconds. A dash means no usable measurement yet."
     static let flight = "Time from releasing one key to pressing the next. Negative means overlap; positive means a gap."

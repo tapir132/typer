@@ -177,7 +177,7 @@ enum TypingEngine {
         let transitions = evidence?.transitions.mapValues { PairDistribution($0.values, count: $0.count) } ?? [:]
         let exactPairs = evidence?.digraphPairs.mapValues { PairDistribution($0.values, count: $0.count) } ?? [:]
         let learnedError = profile.sampleCount > 0 ? min(0.055, max(0.004, profile.backspaceRate * 0.82)) : 0.018
-        // Error frequency is its own control. Human variation only shapes timing.
+        // Error frequency is its own control. Timing variation only shapes timing.
         let errorRate = settings.mode == .clean || settings.mistakeLevel == 0 ? 0 : learnedError * (0.38 + Double(settings.mistakeLevel) * 0.31)
 
         var events: [PlannedEvent] = []

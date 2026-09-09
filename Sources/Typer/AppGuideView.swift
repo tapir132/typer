@@ -73,7 +73,7 @@ struct AppGuideView: View {
             section("Pause or stop", "⌘⌥P pauses and resumes. Return to the same field before resuming. ⌘ Esc or ⌃ Esc stops; text already typed stays in place.")
         case .controls:
             section("Choose a rhythm", "Natural uses the built-in model. Clean skips generated mistakes. My rhythm uses your active profile, with built-in timing where training is limited.")
-            section("Adjust the feel", "Speed sets the target WPM. Variation changes timing; Mistake frequency changes errors and repairs. Pauses and repairs make the final average slower.")
+            section("Adjust the feel", "Speed sets the target WPM. Lower Timing variation gives steadier pacing; higher adds more bursts and brief hesitations. Mistake frequency controls errors and repairs. Long pauses have their own controls.")
             section("Three kinds of pauses", "Thought pauses: occasional 2–5 second waits. Extended thought pauses: rare 2–45 second waits, when Thought pauses is on. Sentence pauses: a wait after each sentence with more text to follow, starting at 2–10 seconds.")
             section("Learn your pause habits", "In My rhythm, Learned pause habits uses your recorded pause frequency and length when enough evidence is available. Check Profiles → Training coverage.")
             section("Save a setup", "Use Preset → Save… to keep your settings. Controls are also remembered when you quit. Source text is never saved.")
