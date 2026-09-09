@@ -111,7 +111,7 @@ struct RootView: View {
                         liveCapture.stop()
                         model.trainingMode = .liveCapture
                         model.section = .train
-                        model.showToast(liveCapture.canSave ? "Live capture stopped. Review and save the sample." : "Live capture stopped. At least 35 typed characters are needed.")
+                        model.showToast(liveCapture.canSave ? "Live capture stopped. Review and save the sample." : "Live capture stopped. \(liveCapture.saveRequirement)")
                     } label: {
                         HStack(spacing: 6) {
                             Circle().fill(TyperTheme.danger).frame(width: 7, height: 7)

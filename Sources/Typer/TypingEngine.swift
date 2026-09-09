@@ -7,6 +7,7 @@ extension TypingProfile {
     func stabilized(wpm targetWPM: Double) -> TypingProfile {
         let baseline = TypingProfile.baseline(wpm: targetWPM)
         guard sampleCount > 0 else { return baseline }
+        let evidence = trainingMode == .liveCapture ? self.evidence?.excludingPauses : self.evidence
         let observed = Double(evidence?.pairs.count ?? 0)
         let confidence = evidence == nil ? min(0.45, 0.12 + Double(sampleCount) * 0.06) : min(0.95, observed / (observed + 120))
         func blend(_ learned: Double, _ reference: Double, range: ClosedRange<Double>, observations: Int? = nil) -> Double {
@@ -38,7 +39,7 @@ extension TypingProfile {
             detectionCharacters: blend(detectionCharacters, baseline.detectionCharacters, range: 0...8, observations: evidence?.detectionDistances.count),
             burstLength: blend(burstLength, baseline.burstLength, range: 3...18, observations: evidence?.burstLengths.count),
             punctuationPause: blend(punctuationPause, baseline.punctuationPause, range: 300...1_600, observations: evidence?.pauses.count),
-            wordPause: blend(wordPause, baseline.wordPause, range: 20...250),
+            wordPause: trainingMode == .liveCapture ? baseline.wordPause : blend(wordPause, baseline.wordPause, range: 20...250),
             digraphs: stableDigraphs,
             confusions: confusions,
             createdAt: createdAt,
@@ -76,7 +77,8 @@ enum TypingEngine {
     }
 
     static func summarize(records: [TrainingKeyRecord], target: String, duration: Double, mode: TrainingMode? = nil, completedText: String? = nil) -> TrainingSample {
-        let evidence = TimingEvidence.extract(records)
+        let extracted = TimingEvidence.extract(records)
+        let evidence = mode == .liveCapture ? extracted.excludingPauses : extracted
         let characters = records.filter { $0.kind == .character }
         let intervals = zip(records, records.dropFirst()).compactMap { prior, current -> Double? in
             guard prior.kind == .character, current.kind == .character else { return nil }
@@ -120,6 +122,7 @@ enum TypingEngine {
 
     static func merge(samples: [TrainingSample], name: String = "My rhythm", id: UUID? = nil) -> TypingProfile {
         guard !samples.isEmpty else { return .baseline() }
+        let samples = samples.map(\.forLearning)
         func pick(_ keyPath: KeyPath<TrainingSample, Double>) -> Double {
             let observations = samples.filter { $0[keyPath: keyPath].isFinite }.sorted { $0[keyPath: keyPath] < $1[keyPath: keyPath] }
             func weight(_ sample: TrainingSample) -> Double { Double(min(128, max(1, sample.evidence?.pairs.count ?? 16))) }
@@ -165,7 +168,7 @@ enum TypingEngine {
         let realism = settings.variation.isFinite ? min(1, max(0, settings.variation)) : 0.78
         let base = 12_000 / wpm
         let evidence = profile.evidence
-        let learnedContexts = settings.mode == .personal && settings.learnedPauses && profile.trainingMode != nil
+        let learnedContexts = settings.mode == .personal && settings.learnedPauses && profile.trainingMode != nil && profile.trainingMode != .liveCapture
             ? (evidence?.pauseContexts ?? [:]).filter { $0.value.isSupported } : [:]
         let baselineDigraphs = TypingProfile.baseline().digraphs
         let empiricalCenter = median(evidence?.pairs.values.filter(\.isValid).map(\.interval) ?? [])

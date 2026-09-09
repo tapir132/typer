@@ -32,6 +32,10 @@ struct ValidationView: View {
             }
             Text(readinessExplanation)
                 .font(.caption).foregroundStyle(.secondary)
+            if context == .liveCapture {
+                Text("Live capture compares active typing. Thinking pauses are excluded.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let report {
                 Text(report.status).font(.headline)
                 if !report.trials.isEmpty {

@@ -213,7 +213,7 @@ struct TypingEngineTests {
     @Test func liveCaptureIsExplicitAndTimeLimited() {
         #expect(TrainingMode.allCases.contains(.liveCapture))
         #expect(GlobalTrainingCapture.minimumCharacters == 35)
-        #expect(GlobalTrainingCapture.maximumDuration == 15 * 60 * 1_000)
+        #expect(GlobalTrainingCapture.maximumDuration == 60 * 60 * 1_000)
     }
 
     private func apply(_ events: [PlannedEvent]) -> String {

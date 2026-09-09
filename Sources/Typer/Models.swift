@@ -261,6 +261,23 @@ struct TrainingSample: Codable, Equatable {
     // Nil means the older recording did not verify passage completion.
     // This does not make an otherwise current sample Legacy.
     var referenceCompleted: Bool? = nil
+    // Missing in older Live samples. Only counts and accumulated active time,
+    // never an ordered activity log or captured text.
+    var liveCaptureActivity: CaptureActivity? = nil
 
     var isLegacy: Bool { evidence == nil || mode == nil }
+
+    var forLearning: TrainingSample {
+        guard mode == .liveCapture else { return self }
+        var sample = self
+        sample.evidence = evidence?.excludingPauses
+        // Older wall-clock WPM cannot be repaired exactly without raw records.
+        // Estimate active pace from its retained motor intervals instead.
+        let intervals = evidence?.pairs.values.filter(\.isValid).map(\.interval) ?? []
+        sample.wpm = liveCaptureActivity?.wpm
+            ?? (intervals.isEmpty ? 64 : 12_000 / (intervals.reduce(0, +) / Double(intervals.count)))
+        sample.punctuationPause = 760
+        sample.wordPause = 58
+        return sample
+    }
 }

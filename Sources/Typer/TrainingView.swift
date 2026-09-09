@@ -168,7 +168,7 @@ struct TrainingView: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 3) {
                     Text("\(liveCapture.characterCount) typed").font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    Text("\(liveCapture.backspaceCount) repairs · \(formatCaptureDuration(liveCapture.elapsedMilliseconds))")
+                    Text("\(liveCapture.backspaceCount) repairs · \(formatCaptureDuration(liveCapture.elapsedMilliseconds)) session")
                         .font(.system(size: 9, design: .monospaced)).foregroundStyle(TyperTheme.muted)
                 }
             }
@@ -183,7 +183,7 @@ struct TrainingView: View {
             }
 
             HStack(spacing: 4) {
-                Text("Best for active writing · 15-minute limit")
+                Text("Leave it on while you use your Mac · 1-hour limit")
                     .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
                 HelpTip(title: "Idle gaps in Live capture", text: QuickHelp.liveCaptureGaps)
             }
@@ -208,7 +208,7 @@ struct TrainingView: View {
                 }
             }
 
-            Text("A useful session needs at least \(GlobalTrainingCapture.minimumCharacters) typed characters. Recording stops automatically after 15 minutes and pauses whenever macOS Secure Input is active.")
+            Text("Type a few words in a row to learn your rhythm. Save needs 35 characters and 20 usable key pairs. Capture pauses for macOS Secure Input.")
                 .font(.system(size: 9)).foregroundStyle(TyperTheme.muted).lineSpacing(2)
             Spacer()
         }
@@ -230,7 +230,10 @@ struct TrainingView: View {
             }
             .frame(height: 58)
 
-            MetricRow(label: "Speed", help: QuickHelp.measuredSpeed, value: snapshot.map { "\(Int($0.wpm.rounded())) WPM" } ?? "—")
+            MetricRow(label: mode == .liveCapture ? "Active speed" : "Speed",
+                      help: mode == .liveCapture ? QuickHelp.activeSpeed : QuickHelp.measuredSpeed,
+                      value: (mode == .liveCapture ? snapshot?.liveCaptureActivity?.wpm : snapshot?.wpm)
+                        .map { "\(Int($0.rounded())) WPM" } ?? "—")
             MetricRow(label: "Dwell time", help: QuickHelp.dwell, value: evidence.flatMap { $0.dwells.isEmpty ? nil : "\(Int(TypingEngine.median($0.dwells).rounded())) ms" } ?? "—")
             MetricRow(label: "Signed flight", help: QuickHelp.flight, value: evidence.flatMap { $0.pairs.values.isEmpty ? nil : "\(Int(TypingEngine.median($0.pairs.values.map(\.flight)).rounded())) ms" } ?? "—")
             MetricRow(label: "Rollover", help: QuickHelp.rollover, value: evidence?.rolloverRate.map { "\(Int(($0 * 100).rounded()))%" } ?? "—")
@@ -269,7 +272,7 @@ struct TrainingView: View {
     private var fingerprintStatus: String {
         if mode != .liveCapture { return "listening" }
         if liveCapture.secureInputActive { return "secure input · paused" }
-        if liveCapture.isCapturing { return "recording" }
+        if liveCapture.isCapturing { return liveCapture.isWaitingForTyping ? "waiting" : "recording" }
         if liveCapture.capturedSample != nil { return "ready to save" }
         return "idle"
     }
@@ -280,15 +283,15 @@ struct TrainingView: View {
 
     private var liveCaptureTitle: String {
         if liveCapture.secureInputActive { return "Paused for Secure Input" }
-        if liveCapture.isCapturing { return "Recording outside Typer" }
+        if liveCapture.isCapturing { return liveCapture.isWaitingForTyping ? "Waiting for typing" : "Recording outside Typer" }
         if liveCapture.capturedSample != nil { return "Session ready to save" }
         return "Ready for an opt-in session"
     }
 
     private var liveCaptureDetail: String {
         if liveCapture.secureInputActive { return "Capture pauses while macOS Secure Input is enabled." }
-        if liveCapture.isCapturing { return "Switch to your editor and type normally. Return here when finished." }
-        if liveCapture.characterCount > 0 { return liveCapture.canSave ? "The raw keystrokes have been discarded." : "This session is too short to save; start over or discard it." }
+        if liveCapture.isCapturing { return "Use your Mac normally. Breaks are ignored; return here to stop and save." }
+        if liveCapture.characterCount > 0 { return liveCapture.canSave ? "The raw keystrokes have been discarded." : liveCapture.saveRequirement }
         return "Input Monitoring is used only after you press Start live capture."
     }
     private var progress: Double {
@@ -369,7 +372,7 @@ struct TrainingView: View {
 
     private func stopLiveCapture() {
         liveCapture.stop()
-        model.showToast(liveCapture.canSave ? "Capture stopped. Review and save the sample." : "Capture stopped. At least 35 typed characters are needed.")
+        model.showToast(liveCapture.canSave ? "Capture stopped. Review and save the sample." : "Capture stopped. \(liveCapture.saveRequirement)")
     }
 
     private func saveLiveSample() {

@@ -43,6 +43,13 @@ struct TimingEvidence: Codable, Equatable {
     var excludedTransitionCount = 0
     var pauseContexts: [String: PauseDistribution]? = nil
 
+    var excludingPauses: TimingEvidence {
+        var result = self
+        result.pauses = []
+        result.pauseContexts = nil
+        return result
+    }
+
     var rolloverRate: Double? {
         guard !pairs.values.isEmpty else { return nil }
         return Double(pairs.values.filter { $0.flight < 0 }.count) / Double(pairs.values.count)

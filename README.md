@@ -38,9 +38,11 @@ Open the gear (or press **⌘,**) for **Settings → Guide**, or use **Help → 
 
 Use **Train** in three ways: **Copy** learns exact errors and digraphs, **Freewrite** learns organic thought pauses, and **Sprint** learns fast bursts and recovery reflexes. The profiler measures dwell time, flight time, press-to-press digraph latency, timing variation, burst length, correction rate, detection delay, repair latency, and recurring substitutions. Profiles and samples stay in macOS user defaults on this Mac.
 
-**Live capture** is an optional fourth mode for learning while you write in Google Docs or another application. It uses a listen-only event tap, never intercepts or delays the target application's input, pauses while macOS Secure Input is enabled, stops automatically after 15 minutes, and discards raw keystrokes when the session ends. Only derived timing and correction statistics are saved. Live capture requires the separate macOS **Input Monitoring** permission and never starts without an explicit click.
+**Live capture** is an optional fourth mode for learning while you write in Google Docs or another application. It uses a listen-only event tap, never intercepts or delays the target application's input, pauses while macOS Secure Input is enabled, stops automatically after one hour, and discards raw keystrokes when the session ends. Only derived timing and correction statistics are saved. Live capture requires the separate macOS **Input Monitoring** permission and never starts without an explicit click.
 
-Live capture is intended for active writing sessions and stops after 15 minutes. Long idle gaps are excluded from motor timing measurements, but still reduce measured WPM; gaps up to a minute may be learned as pauses. It is not an hour-long background activity recorder.
+You can leave Live capture on while using your Mac for up to an hour. Gaps over 2.5 seconds, app changes, clicks, scrolling, sleep, and Secure Input break the sequence. **Active speed** uses contiguous typing intervals, including deletion time, and excludes those breaks. The session timer includes idle and sleep time. Live capture learns key timings and corrections, while Freewrite remains the way to learn thinking pauses: Live cannot distinguish thinking from reading or browsing.
+
+The live fingerprint refreshes from recent keys; saving summarizes the full session once. A sample needs 35 characters and 20 usable key pairs, so occasional isolated key presses cannot become a misleading profile. Existing Live samples remain usable: when retraining or validating, their active pace is estimated from retained motor intervals and their pause evidence is excluded. There is no need to clear old profiles.
 
 ### Mistakes and corrections during training
 

@@ -55,7 +55,7 @@ struct ValidationTrial: Codable, Equatable {
 
 struct ValidationReport: Codable, Equatable {
     var schemaVersion = 2
-    var modelVersion = "paired-timing-v3-context-pauses"
+    var modelVersion = "paired-timing-v4-active-live-capture"
     var createdAt: Date
     var context: String
     var eligibleSessions: Int
@@ -167,7 +167,7 @@ enum TypingValidation {
 
     static func evaluate(samples: [TrainingSample], mode: TrainingMode? = nil, seeds: [UInt64] = [17, 41, 89]) -> ValidationReport {
         let context = mode ?? samples.last?.mode
-        let eligible = eligibleSamples(samples, mode: context)
+        let eligible = eligibleSamples(samples, mode: context).map(\.forLearning)
         var report = ValidationReport(createdAt: Date(), context: context?.rawValue ?? "Unknown legacy context", eligibleSessions: eligible.count,
             status: "Not enough comparable sessions yet.",
             limitations: [
@@ -180,6 +180,9 @@ enum TypingValidation {
             ], trials: [], humanToHuman: nil)
         report.limitations.append("Overview rows report median W1 and range across paired Natural/My rhythm trials with the same session, seed and WPM. Seeds share human sessions; they are not independent human replicates.")
         report.limitations.append("Contextual pauses use the longest valid key-up-to-next-press idle across a punctuation/space boundary, or an adjacent letter pair. The 1-second cutoff and support gates are engineering choices. Older samples without these summaries remain usable, with these metrics unavailable.")
+        if context == .liveCapture {
+            report.limitations.append("Live capture excludes idle gaps over 2.5 seconds and does not learn or validate thinking pauses. Active WPM uses contiguous typing intervals; older Live samples use an estimate from retained motor intervals. The session timer includes idle and sleep time.")
+        }
         guard eligible.count >= 4 else { return report }
         let split = eligible.count - 2
         let training = Array(eligible.prefix(split).suffix(5))

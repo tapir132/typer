@@ -87,11 +87,11 @@ struct AppGuideView: View {
             section("Type, then save", "Type naturally; don't paste or invent mistakes. Save to My rhythm when ready. Save before leaving Train or changing modes; an unfinished exercise resets.")
             section("Samples and profiles", "One sample is one session. My rhythm uses up to five recent samples from the same mode. Saved samples total includes older and Legacy samples too.")
             section("Legacy profiles", QuickHelp.legacyProfile)
-            section("Can Live capture run in the background?", "For active writing sessions, up to 15 minutes. Start it, switch to your editor, then return to stop and save. It ignores Typer and pauses for macOS Secure Input.")
+            section("Can Live capture run in the background?", "Yes, for up to one hour. Start it and use your Mac normally, then return to save. It ignores Typer and pauses for macOS Secure Input. The hour includes breaks and sleep.")
             section("What about long idle gaps?", QuickHelp.liveCaptureGaps)
             details("Saving and learning details") {
-                section("When Save becomes available", "Copy and Sprint need 60% of the passage and 35 key events; Freewrite needs 117 characters and 35 events. Live capture needs 35 typed characters and must be stopped first.")
-                section("What is kept", "Typer keeps 12 current samples, plus Legacy samples separately. Saving rebuilds and activates My rhythm. Copy, Freewrite, Sprint, and Live evidence stay separate.")
+                section("When Save becomes available", "Copy and Sprint need 60% of the passage and 35 key events; Freewrite needs 117 characters and 35 events. Live capture needs 35 characters and 20 usable key pairs. Stop recording before saving.")
+                section("What is kept", "Typer keeps 12 current samples, plus Legacy samples separately. Saving rebuilds and activates My rhythm. Copy, Freewrite, Sprint, and Live evidence stay separate. Older Live samples keep their key timings; their active speed is estimated from those timings when retraining.")
                 section("Learned pauses", "Each pause category needs 20 opportunities, three observed pauses, and two sessions before it affects playback. Until then, Typer uses its usual timing.")
             }
         case .measurements:
@@ -132,7 +132,7 @@ struct AppGuideView: View {
             section("Pause won't resume", "Return to the original app and the same field, then press ⌘⌥P. If the document changed, stop and check the partial text before starting again.")
             section("Corrections look wrong", "Try Clean first. Autocorrect, keyboard layouts, formatting, and editor shortcuts can change how keys are handled.")
             section("Save or validation is unavailable", "Keep typing until Save is enabled. Validation needs four eligible sessions in one mode. Mixed modes and Legacy samples don't qualify together.")
-            section("Live capture shows no typing", "Check Input Monitoring and click Start live capture. Type outside Typer. Secure Input pauses recording; the session ends after 15 minutes.")
+            section("Live capture shows no typing", "Check Input Monitoring and click Start live capture. Type outside Typer. Secure Input pauses recording; the session ends after one hour.")
         }
     }
 

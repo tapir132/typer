@@ -15,14 +15,20 @@ struct TrainingCoverageView: View {
                         supported: evidence.pairs.values.count >= 120, advice: "Completed key releases are needed; zero observed overlap can be valid.")
                     row("Corrections", count: "\(evidence.deletionRuns.count) deletion runs",
                         supported: evidence.deletionRuns.count >= 10, advice: "Correct real errors normally. Do not invent mistakes for training.")
-                    ForEach(PauseContext.allCases, id: \.rawValue) { context in
-                        let value = evidence.pauseContexts?[context.rawValue]
-                        row(context.label,
-                            count: value.map { "\($0.pauseCount) pause\($0.pauseCount == 1 ? "" : "s") / \($0.opportunities) opportunities · \($0.sessions) session\($0.sessions == 1 ? "" : "s")" }
-                                ?? (evidence.pauseContexts == nil ? "Not recorded in older samples" : "No eligible boundaries recorded"),
-                            supported: value?.isSupported == true,
-                            advice: "Learns after 20 opportunities, 3 observed pauses and 2 sessions. Keep typing naturally.")
+                    if profile.trainingMode != .liveCapture {
+                        ForEach(PauseContext.allCases, id: \.rawValue) { context in
+                            let value = evidence.pauseContexts?[context.rawValue]
+                            row(context.label,
+                                count: value.map { "\($0.pauseCount) pause\($0.pauseCount == 1 ? "" : "s") / \($0.opportunities) opportunities · \($0.sessions) session\($0.sessions == 1 ? "" : "s")" }
+                                    ?? (evidence.pauseContexts == nil ? "Not recorded in older samples" : "No eligible boundaries recorded"),
+                                supported: value?.isSupported == true,
+                                advice: "Learns after 20 opportunities, 3 observed pauses and 2 sessions. Keep typing naturally.")
+                        }
                     }
+                }
+                if profile.trainingMode == .liveCapture {
+                    Text("Thinking pauses aren't learned in Live capture. Use Freewrite to teach those.")
+                        .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
                 }
                 Text("These counts describe the evidence used by this profile. “Available” is a support check, not proof of realism. Pause categories use punctuation and spacing; abbreviations can be ambiguous. Validate against fresh sessions before drawing conclusions.")
                     .font(.system(size: 11)).foregroundStyle(TyperTheme.mutedStrong)
