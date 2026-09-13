@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       smoke_tested:
-        description: Confirm this Edge build passed a manual smoke test
+        description: Confirm this Edge build passed native UI and playback smoke checks
         required: true
         type: boolean
         default: false
@@ -32,6 +32,10 @@ jobs:
           fetch-depth: 0
       - name: Test
         run: swift test -Xswiftc -warnings-as-errors
+      - name: Compile native verification tools
+        run: |
+          ./scripts/verify-playback.sh --compile-only
+          ./scripts/verify-shortcuts.sh --compile-only
       - name: Validate candidate
         env:
           SMOKE_TESTED: ${{ inputs.smoke_tested }}
@@ -75,4 +79,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
-        run: gh release create "v$VERSION" "release/Typer-$VERSION.zip" "release/Typer-$VERSION.dmg" release/appcast.xml --repo "$GITHUB_REPOSITORY" --title "Typer $VERSION" --generate-notes
+        run: gh release create "v$VERSION" "release/Typer-$VERSION.zip" "release/Typer-$VERSION.dmg" release/appcast.xml --repo "$GITHUB_REPOSITORY" --title "Typer $VERSION" --target "$(git rev-parse HEAD)" --generate-notes

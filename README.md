@@ -18,13 +18,21 @@ open .build/Typer.app
 
 The build script uses the local `Cadence Signing` identity when available so Accessibility permission survives rebuilds; contributors without it receive an ad-hoc-signed build. On first use, open Typer's settings and enable Accessibility permission in **System Settings → Privacy & Security → Accessibility**.
 
+## Keyboard shortcuts
+
+Open **Settings → Shortcuts** to change Arm typing, Pause / resume, Skip current wait, and Stop typing. Click the current binding, press a new combination, then release the keys to save. Bare Escape cancels. Function keys work on their own; other keys need Control, Option, or Command. Modifier-only chords trigger on release when no other key was used and require Accessibility permission.
+
+The recorder suspends Typer's registrations while recording, ignores Caps Lock/Fn keyboard-state flags, and retains the old binding if the new combination is duplicated or unavailable. Closing Settings, changing tabs, clicking elsewhere, or switching applications cancels recording. Arm works while Typer is focused. Pause and Skip register during playback; Stop also works during the countdown. Control–Esc remains a backup stop when available. Arming requires a working stop plus the configured Pause and Skip bindings.
+
+Saved bindings update the menus, Compose, preview controls, guide, and fullscreen overlay. Shortcut preferences are separate from typing presets. **Restore default shortcuts** resets only these bindings.
+
 ## Workflow
 
 1. Paste or write source text in **Compose**.
 2. Choose WPM and realism settings.
 3. Click **Arm typing**.
 4. During the five-second countdown, focus any editable field in another app.
-5. Press **⌘⌥P** to pause/resume, **⌘⌥→** to skip a long wait, or **⌘ Esc / ⌃ Esc** to stop.
+5. Use the shortcuts shown in the overlay to pause, skip a wait, or stop. Defaults are **⌘⌥P**, **⌘⌥→**, and **⌘Esc / ⌃Esc**. Change them in **Settings → Shortcuts**.
 
 During playback, a red fullscreen overlay covers connected screens with a large pause/resume shortcut, destination, progress and wait label. It stays visible with a lighter tint while paused and disappears on stop or completion. It does not take keyboard focus and passes mouse clicks through. **Compose → Fullscreen typing overlay** toggles it; the default is on.
 

@@ -12,12 +12,17 @@ cd "$PROJECT_ROOT"
 # Compile the production components, without loading Typer's user preferences,
 # application model, updater or global capture.
 swiftc -swift-version 5 -warnings-as-errors -parse-as-library \
-  Sources/Typer/Models.swift Sources/Typer/Theme.swift Sources/Typer/HelpTip.swift \
+  Sources/Typer/Models.swift Sources/Typer/GlobalTrainingCapture.swift Sources/Typer/Theme.swift Sources/Typer/HelpTip.swift \
   Sources/Typer/TimingEvidence.swift Sources/Typer/PauseLearning.swift Sources/Typer/TypingEngine.swift \
-  Sources/Typer/KeyTimeline.swift Sources/Typer/TypingController.swift \
+  Sources/Typer/KeyTimeline.swift Sources/Typer/ShortcutBinding.swift Sources/Typer/ShortcutManager.swift Sources/Typer/TypingController.swift \
   Sources/Typer/TrackingTextView.swift Sources/Typer/TypingScreenOverlay.swift Sources/Typer/PlaybackCheck.swift \
   Sources/Typer/PlaybackCheckController.swift Sources/Typer/PlaybackCheckView.swift \
   scripts/verify-playback.swift -o "$APP_BUNDLE/Contents/MacOS/TyperPlaybackCheck"
+
+if [[ "${1:-}" == "--compile-only" ]]; then
+  echo "Playback verification harness compiled successfully."
+  exit 0
+fi
 
 cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

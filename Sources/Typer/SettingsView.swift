@@ -19,12 +19,13 @@ struct SettingsView: View {
             Picker("Settings section", selection: $model.settingsSection) {
                 ForEach(SettingsSection.allCases) { section in Text(section.rawValue).tag(section) }
             }
-            .pickerStyle(.segmented).labelsHidden().frame(width: 240).padding(.bottom, 20)
+            .pickerStyle(.segmented).labelsHidden().frame(width: 360).padding(.bottom, 20)
 
             Rectangle().fill(TyperTheme.line).frame(height: 1)
             Group {
                 switch model.settingsSection {
                 case .general: general
+                case .shortcuts: ShortcutSettingsView(shortcuts: model.shortcuts)
                 case .guide: AppGuideView(model: model)
                 }
             }

@@ -19,11 +19,23 @@ final class TypingController: ObservableObject {
     private var playbackSession: PlaybackSession?
     private let playbackQueue = DispatchQueue(label: "typer.playback", qos: .userInitiated)
 
-    init() {
-        GlobalStopHotKey.shared.onTrigger = { [weak self] in self?.stop() }
-        GlobalStopHotKey.shared.onTogglePause = { [weak self] in self?.togglePause() }
-        GlobalStopHotKey.shared.onSkipWait = { [weak self] in self?.skipWait() }
-        GlobalStopHotKey.shared.register()
+    let shortcuts: ShortcutManager
+    var onArm: (() -> Void)?
+
+    init(shortcuts: ShortcutManager? = nil) {
+        let shortcuts = shortcuts ?? ShortcutManager()
+        self.shortcuts = shortcuts
+        shortcuts.onAction = { [weak self] action in
+            guard let self else { return }
+            switch action {
+            case .arm: self.onArm?()
+            case .pause: self.togglePause()
+            case .skipWait: self.skipWait()
+            case .stop: self.stop()
+            }
+        }
+        shortcuts.onBindingsChanged = { [weak self] in self?.refreshOverlay() }
+        shortcuts.start()
         focusObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
@@ -83,6 +95,7 @@ final class TypingController: ObservableObject {
     }
 
     private func startCountdown(with plan: TypingPlan) {
+        if let error = shortcuts.preparePlayback() { state = .error(error); return }
         lastPlan = plan
         state = .armed(5)
         countdownTask = Task { [weak self] in
@@ -94,6 +107,7 @@ final class TypingController: ObservableObject {
             }
             guard !Task.isCancelled, let self else { return }
             guard !NSApp.isActive else {
+                self.shortcuts.finishPlayback()
                 self.state = .error("Click into another application before the countdown ends.")
                 return
             }
@@ -108,7 +122,7 @@ final class TypingController: ObservableObject {
         countdownTask = nil
         playbackSession?.cancel()
         playbackSession = nil
-        GlobalStopHotKey.shared.disablePlaybackControls()
+        shortcuts.finishPlayback()
         screenOverlay.hide()
         target = nil
         pauseMessage = nil
@@ -153,16 +167,13 @@ final class TypingController: ObservableObject {
 
     private func refreshOverlay() {
         screenOverlay.update(state: state, progress: progress, target: target?.localizedName ?? "the target app",
-                             message: pauseMessage, enabled: overlayEnabled)
+                             message: pauseMessage, enabled: overlayEnabled, shortcuts: shortcuts.bindings, stopText: shortcuts.stopDescription)
     }
 
     private func begin(_ plan: TypingPlan) {
         guard let target = NSWorkspace.shared.frontmostApplication, target.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            shortcuts.finishPlayback()
             state = .error("Focus the target application before typing starts.")
-            return
-        }
-        guard GlobalStopHotKey.shared.enablePlaybackControls() else {
-            state = .error("The pause or skip shortcut is already in use. Free ⌘⌥P and ⌘⌥→ in the other app, then try again.")
             return
         }
         self.target = target
@@ -189,7 +200,7 @@ final class TypingController: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.playbackSession === session else { return }
                 self.playbackSession = nil
-                GlobalStopHotKey.shared.disablePlaybackControls()
+                self.shortcuts.finishPlayback()
                 self.screenOverlay.hide()
                 self.target = nil
                 switch outcome {
@@ -219,84 +230,6 @@ enum KeyboardEventPoster {
         }
         event.setIntegerValueField(.eventSourceUserData, value: marker)
         return event
-    }
-}
-
-/// Carbon hot keys are handled by the window server, work before Accessibility
-/// is granted, and consume Escape so it does not leak into the target editor.
-@MainActor
-final class GlobalStopHotKey {
-    static let shared = GlobalStopHotKey()
-
-    var onTrigger: (() -> Void)?
-    var onTogglePause: (() -> Void)?
-    var onSkipWait: (() -> Void)?
-    private(set) var isRegistered = false
-    private var hotKeyRefs: [EventHotKeyRef] = []
-    private var handlerRef: EventHandlerRef?
-    private var playbackRefs: [EventHotKeyRef] = []
-
-    func enablePlaybackControls() -> Bool {
-        guard playbackRefs.isEmpty else { return true }
-        for (code, id) in [(UInt32(kVK_ANSI_P), UInt32(3)), (UInt32(kVK_RightArrow), UInt32(4))] {
-            var reference: EventHotKeyRef?
-            let result = RegisterEventHotKey(code, UInt32(cmdKey | optionKey),
-                EventHotKeyID(signature: 0x5459_5052, id: id), GetEventDispatcherTarget(), 0, &reference)
-            guard result == noErr, let reference else { disablePlaybackControls(); return false }
-            playbackRefs.append(reference)
-        }
-        return true
-    }
-
-    func disablePlaybackControls() {
-        for reference in playbackRefs { UnregisterEventHotKey(reference) }
-        playbackRefs = []
-    }
-
-    func register() {
-        guard hotKeyRefs.isEmpty else { return }
-        installHandler()
-        let target = GetEventDispatcherTarget()
-        let bindings: [(modifiers: UInt32, id: UInt32)] = [
-            (UInt32(cmdKey), 1),
-            (UInt32(controlKey), 2)
-        ]
-        for binding in bindings {
-            var reference: EventHotKeyRef?
-            let identifier = EventHotKeyID(signature: 0x5459_5052, id: binding.id) // "TYPR"
-            let status = RegisterEventHotKey(
-                UInt32(kVK_Escape),
-                binding.modifiers,
-                identifier,
-                target,
-                0,
-                &reference
-            )
-            if status == noErr, let reference { hotKeyRefs.append(reference) }
-            else { NSLog("Typer could not register emergency stop hot key (OSStatus %d)", status) }
-        }
-        isRegistered = hotKeyRefs.count == bindings.count
-    }
-
-    private func installHandler() {
-        guard handlerRef == nil else { return }
-        var spec = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
-        InstallEventHandler(GetEventDispatcherTarget(), { _, event, _ in
-            var identifier = EventHotKeyID()
-            guard GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
-                                    nil, MemoryLayout<EventHotKeyID>.size, nil, &identifier) == noErr else { return noErr }
-            MainActor.assumeIsolated {
-                switch identifier.id {
-                case 3: GlobalStopHotKey.shared.onTogglePause?()
-                case 4: GlobalStopHotKey.shared.onSkipWait?()
-                default: GlobalStopHotKey.shared.onTrigger?()
-                }
-            }
-            return noErr
-        }, 1, &spec, nil, &handlerRef)
     }
 }
 

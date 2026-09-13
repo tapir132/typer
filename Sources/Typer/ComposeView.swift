@@ -4,12 +4,14 @@ struct ComposeView: View {
     @ObservedObject var model: AppModel
     @ObservedObject private var controller: TypingController
     @ObservedObject private var profiles: ProfileStore
+    @ObservedObject private var shortcuts: ShortcutManager
     @State private var showsPlaybackPreview = false
 
     init(model: AppModel) {
         self.model = model
         controller = model.controller
         profiles = model.profiles
+        shortcuts = model.shortcuts
     }
 
     var body: some View {
@@ -31,7 +33,7 @@ struct ComposeView: View {
         .padding(.horizontal, TyperLayout.workspaceHorizontalPadding)
         .padding(.top, TyperLayout.workspaceTopPadding)
         .padding(.bottom, TyperLayout.workspaceBottomPadding)
-        .sheet(isPresented: $showsPlaybackPreview) { PlaybackPreviewView(plan: model.previewPlan, text: model.sourceText) }
+        .sheet(isPresented: $showsPlaybackPreview) { PlaybackPreviewView(plan: model.previewPlan, text: model.sourceText, shortcuts: shortcuts) }
         .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in showsPlaybackPreview = false }
     }
 
@@ -123,14 +125,14 @@ struct ComposeView: View {
                     Image(systemName: "play.fill").font(.system(size: 11))
                     Text("Arm typing")
                     Spacer()
-                    Text("⌘↩").font(.system(size: 9, weight: .medium, design: .monospaced)).opacity(0.78)
+                    Text(shortcuts.bindings.arm.displayText).font(.system(size: 9, weight: .medium, design: .monospaced)).opacity(0.78)
                 }
                 .padding(.horizontal, 14)
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.state.isBusy)
 
-            Text("Pause/resume: ⌘⌥P  ·  Stop: ⌘ Esc / ⌃ Esc")
+            Text("Pause/resume: \(shortcuts.bindings.pause.displayText)  ·  Stop: \(shortcuts.stopDescription)")
                 .font(.system(size: 8.5, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.muted).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity).padding(.top, 9)
 

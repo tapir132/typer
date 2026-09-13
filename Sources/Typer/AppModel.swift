@@ -26,15 +26,17 @@ final class AppModel: ObservableObject {
 
     let profiles: ProfileStore
     let preferences: SettingsStore
-    let controller = TypingController()
+    let controller: TypingController
+    var shortcuts: ShortcutManager { controller.shortcuts }
     let liveCapture = GlobalTrainingCapture()
     private var previewTask: Task<Void, Never>?
     private var previewRevision = 0
     private var previewAppliedRevision = 0
 
-    init(profileStore: ProfileStore? = nil) {
+    init(profileStore: ProfileStore? = nil, shortcuts: ShortcutManager? = nil) {
         profiles = profileStore ?? ProfileStore()
         preferences = SettingsStore(defaults: profiles.defaults)
+        controller = TypingController(shortcuts: shortcuts ?? ShortcutManager(defaults: profiles.defaults))
         settings = preferences.settings
         controller.overlayEnabled = settings.showTypingOverlay
         if CommandLine.arguments.contains("--train") { section = .train }
@@ -43,6 +45,7 @@ final class AppModel: ObservableObject {
             section = .train
             trainingMode = .liveCapture
         }
+        controller.onArm = { [weak self] in self?.arm() }
         profiles.onChange = { [weak self] in self?.schedulePreviewRefresh() }
         refreshPermissions()
         refreshPreviewImmediately()

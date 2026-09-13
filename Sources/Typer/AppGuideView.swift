@@ -15,6 +15,12 @@ enum GuideTopic: String, CaseIterable, Identifiable {
 
 struct AppGuideView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var shortcuts: ShortcutManager
+
+    init(model: AppModel) {
+        self.model = model
+        shortcuts = model.shortcuts
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -36,9 +42,9 @@ struct AppGuideView: View {
                     }
                     Rectangle().fill(TyperTheme.line).frame(height: 1).padding(.vertical, 14)
                     VStack(alignment: .leading, spacing: 9) {
-                        shortcut("⌘⌥P", "Pause / resume")
-                        shortcut("⌘⌥→", "Skip a long wait")
-                        shortcut("⌘ Esc / ⌃ Esc", "Stop typing")
+                        shortcut(shortcuts.bindings.pause.displayText, "Pause / resume")
+                        shortcut(shortcuts.bindings.skipWait.displayText, "Skip a long wait")
+                        shortcut(shortcuts.stopDescription, "Stop typing")
                     }
                     .padding(.horizontal, 10)
                 }
@@ -70,8 +76,9 @@ struct AppGuideView: View {
             section("3. Allow typing", "In Settings → General, enable Accessibility. Input Monitoring is only for Live capture.")
             section("4. Arm and click your editor", "Click Arm typing. You have five seconds to switch apps and click where the text should begin.")
             section("5. Keep that field focused", "Let Typer finish, then check the text. The red overlay shows pause and stop shortcuts; mouse clicks pass through it.")
-            section("Pause or stop", "⌘⌥P pauses and resumes. Return to the same field before resuming. ⌘ Esc or ⌃ Esc stops; text already typed stays in place.")
+            section("Pause or stop", "\(shortcuts.bindings.pause.displayText) pauses and resumes. Return to the same field before resuming. \(shortcuts.stopDescription) stops; text already typed stays in place.")
         case .controls:
+            section("Change shortcuts", "Settings → Shortcuts lets you rebind Arm, Pause / resume, Skip, and Stop. Click a binding, press and release the new keys. Esc cancels. Control–Esc remains a backup Stop when available.")
             section("Choose a rhythm", "Natural uses the built-in model. Clean skips generated mistakes. My rhythm uses your active profile, with built-in timing where training is limited.")
             section("Adjust the feel", "Speed sets the target WPM. Lower Timing variation gives steadier pacing; higher adds more bursts and brief hesitations. Mistake frequency controls errors and repairs. Long pauses have their own controls.")
             section("Three kinds of pauses", "Thought pauses: occasional 2–5 second waits. Extended thought pauses: rare 2–45 second waits, when Thought pauses is on. Sentence pauses: a wait after each sentence with more text to follow, starting at 2–10 seconds.")
@@ -80,7 +87,7 @@ struct AppGuideView: View {
             details("More controls") {
                 section("Sentence pause range", "Set Min and Max from 1–60 seconds; equal values give a fixed wait. These pauses work in Clean too. At the same point, the longer pause wins. Unusual abbreviations can confuse sentence detection.")
                 section("Repairs, drift, and overlay", "Delayed repairs lets a few characters pass before a correction. Fatigue drift changes the pace over a run. Fullscreen typing overlay toggles the red tint; shortcuts work either way.")
-                section("Preview and estimate", "The estimate includes planned waits and repairs. Arm typing uses the previewed plan unless you change the text, settings, or profile. ⌘⌥→ skips the current long wait.")
+                section("Preview and estimate", "The estimate includes planned waits and repairs. Arm typing uses the previewed plan unless you change the text, settings, or profile. \(shortcuts.bindings.skipWait.displayText) skips the current long wait.")
             }
         case .training:
             section("Pick a mode", "Copy follows a passage and learns exact mistakes. Freewrite learns from new writing. Sprint learns faster typing. Live capture observes typing in another app.")
@@ -128,8 +135,8 @@ struct AppGuideView: View {
             section("Built the app yourself?", "Local changes need a rebuild and a relaunch. Check now only finds published updates; it can't load local edits.")
         case .troubleshooting:
             section("Nothing gets typed", "Check Accessibility in General. During the countdown, switch to another app and click an editable field. Try a short Clean-mode run in a plain-text document.")
-            section("Typing goes to the wrong place", "Stop with ⌘ Esc or ⌃ Esc. Typer pauses when you switch apps, but can't detect every cursor or field change inside one app.")
-            section("Pause won't resume", "Return to the original app and the same field, then press ⌘⌥P. If the document changed, stop and check the partial text before starting again.")
+            section("Typing goes to the wrong place", "Stop with \(shortcuts.stopDescription). Typer pauses when you switch apps, but can't detect every cursor or field change inside one app.")
+            section("Pause won't resume", "Return to the original app and the same field, then press \(shortcuts.bindings.pause.displayText). If the document changed, stop and check the partial text before starting again.")
             section("Corrections look wrong", "Try Clean first. Autocorrect, keyboard layouts, formatting, and editor shortcuts can change how keys are handled.")
             section("Save or validation is unavailable", "Keep typing until Save is enabled. Validation needs four eligible sessions in one mode. Mixed modes and Legacy samples don't qualify together.")
             section("Live capture shows no typing", "Check Input Monitoring and click Start live capture. Type outside Typer. Secure Input pauses recording; the session ends after one hour.")

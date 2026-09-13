@@ -9,6 +9,7 @@ enum AppSection: String, CaseIterable, Identifiable {
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case general = "General"
+    case shortcuts = "Shortcuts"
     case guide = "Guide"
     var id: String { rawValue }
 }

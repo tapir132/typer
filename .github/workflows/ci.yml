@@ -15,6 +15,10 @@ jobs:
       - uses: actions/checkout@v5
       - name: Test
         run: swift test -Xswiftc -warnings-as-errors
+      - name: Compile native verification tools
+        run: |
+          ./scripts/verify-playback.sh --compile-only
+          ./scripts/verify-shortcuts.sh --compile-only
       - name: Build and verify app bundle
         run: |
           ./scripts/build-app.sh

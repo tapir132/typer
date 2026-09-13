@@ -114,8 +114,10 @@ final class PlaybackPreviewController: ObservableObject {
 struct PlaybackPreviewView: View {
     @StateObject private var preview: PlaybackPreviewController
     @Environment(\.dismiss) private var dismiss
+    private var shortcuts: ShortcutManager?
 
-    init(plan: TypingPlan, text: String) {
+    init(plan: TypingPlan, text: String, shortcuts: ShortcutManager? = nil) {
+        self.shortcuts = shortcuts
         _preview = StateObject(wrappedValue: PlaybackPreviewController(plan: plan, text: text))
     }
 
@@ -143,9 +145,8 @@ struct PlaybackPreviewView: View {
             HStack {
                 if preview.running {
                     Button(preview.paused ? "Resume" : "Pause") { preview.togglePause() }
-                        .keyboardShortcut("p", modifiers: [.command, .option]).buttonStyle(SecondaryButtonStyle())
+                        .buttonStyle(SecondaryButtonStyle())
                     Button("Skip wait") { preview.skipWait() }
-                        .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
                         .buttonStyle(SecondaryButtonStyle()).disabled(preview.paused || !preview.progress.canSkipWait)
                     Button("Stop") { preview.stop() }.keyboardShortcut(.escape, modifiers: []).buttonStyle(QuietButtonStyle())
                 } else {
@@ -154,12 +155,22 @@ struct PlaybackPreviewView: View {
                 Spacer()
                 HelpTip(title: "About this preview", text: "Uses the current plan and playback clock in an in-memory editor. It does not post keys to another app or require Accessibility. Skip wait shortens only this preview run; your settings and original plan stay unchanged. External editors may handle corrections or autocorrect differently.")
             }
-            Text("⌘⌥P pause/resume · ⌘⌥→ skip a long wait · Esc stop preview")
+            Text("\(shortcuts?.bindings.pause.displayText ?? ShortcutBindings().pause.displayText) pause/resume · \(shortcuts?.bindings.skipWait.displayText ?? ShortcutBindings().skipWait.displayText) skip a long wait · Esc stop preview")
                 .font(.caption).foregroundStyle(TyperTheme.mutedStrong)
         }
         .padding(24).frame(width: 820, height: min(690, (NSScreen.main?.visibleFrame.height ?? 770) - 80))
         .foregroundStyle(TyperTheme.ink).background(TyperTheme.background)
-        .onDisappear { preview.stop() }
+        .onAppear {
+            shortcuts?.beginPreview { action in
+                switch action {
+                case .pause: preview.togglePause()
+                case .skipWait: preview.skipWait()
+                case .stop: preview.stop()
+                case .arm: break
+                }
+            }
+        }
+        .onDisappear { preview.stop(); shortcuts?.endPreview() }
     }
 }
 

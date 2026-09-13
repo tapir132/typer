@@ -5,6 +5,7 @@ struct RootView: View {
     @ObservedObject private var controller: TypingController
     @ObservedObject private var profiles: ProfileStore
     @ObservedObject private var liveCapture: GlobalTrainingCapture
+    @ObservedObject private var shortcuts: ShortcutManager
     @ObservedObject private var updates = UpdateManager.shared
 
     // Optional geometry observation supports native window layout regression checks.
@@ -16,6 +17,7 @@ struct RootView: View {
         controller = model.controller
         profiles = model.profiles
         liveCapture = model.liveCapture
+        shortcuts = model.shortcuts
     }
 
     var body: some View {
@@ -183,12 +185,12 @@ struct RootView: View {
                     .font(.system(size: 28, weight: .medium))
                     .foregroundStyle(TyperTheme.signal)
                 Text(controller.state == .paused ? "Typing is paused" : controller.progress.activity).font(.system(size: 20, weight: .semibold))
-                Text(controller.pauseMessage ?? "⌘⌥P pause/resume · ⌘ Esc / ⌃ Esc stop")
+                Text(controller.pauseMessage ?? "\(shortcuts.bindings.pause.displayText) pause/resume · \(shortcuts.stopDescription) stop")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(TyperTheme.mutedStrong)
                 if controller.state == .paused {
                     Button("Return to target app") { controller.focusTarget() }.buttonStyle(SecondaryButtonStyle())
-                    Text("Focus the same field, then press ⌘⌥P.").font(.caption).foregroundStyle(TyperTheme.mutedStrong)
+                    Text("Focus the same field, then press \(shortcuts.bindings.pause.displayText).").font(.caption).foregroundStyle(TyperTheme.mutedStrong)
                 } else {
                     Button("Pause typing") { controller.pause() }.buttonStyle(SecondaryButtonStyle())
                     Button("Skip current wait") { controller.skipWait() }.buttonStyle(QuietButtonStyle())

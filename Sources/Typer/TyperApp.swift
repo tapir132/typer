@@ -72,19 +72,21 @@ struct TyperApp: App {
 private struct TypingCommands: Commands {
     @ObservedObject var model: AppModel
     @ObservedObject var controller: TypingController
+    @ObservedObject private var shortcuts: ShortcutManager
+
+    init(model: AppModel, controller: TypingController) {
+        self.model = model; self.controller = controller; shortcuts = model.shortcuts
+    }
 
     var body: some Commands {
         CommandMenu("Typing") {
-            Button("Arm Typing") { model.arm() }
-                .keyboardShortcut(.return, modifiers: .command).disabled(controller.state.isBusy)
-            Button("Stop Typing") { controller.stop() }
-                .keyboardShortcut(.escape, modifiers: .command)
-            Button("Pause / Resume Typing") { controller.togglePause() }
-                .keyboardShortcut("p", modifiers: [.command, .option])
-                .disabled(!controller.state.isPlaybackActive)
-            Button("Skip Current Wait") { controller.skipWait() }
-                .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
-                .disabled(!controller.progress.canSkipWait || controller.state != .typing)
+            Button("Arm Typing (\(shortcuts.bindings.arm.displayText))") { model.arm() }
+                .disabled(controller.state.isBusy || shortcuts.recordingAction != nil || shortcuts.previewActive)
+            Button("Stop Typing (\(shortcuts.stopDescription))") { shortcuts.perform(.stop) }
+            Button("Pause / Resume Typing (\(shortcuts.bindings.pause.displayText))") { shortcuts.perform(.pause) }
+                .disabled(!controller.state.isPlaybackActive && !shortcuts.previewActive)
+            Button("Skip Current Wait (\(shortcuts.bindings.skipWait.displayText))") { shortcuts.perform(.skipWait) }
+                .disabled(!shortcuts.previewActive && (!controller.progress.canSkipWait || controller.state != .typing))
         }
     }
 }
