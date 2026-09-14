@@ -2,16 +2,46 @@ import AppKit
 import Foundation
 import Carbon
 
+struct BrowserProfileSnapshot: Codable {
+    var profile: TypingProfile
+    var settings: TypingSettings
+    var samples: [TrainingSample]
+    // Supplied explicitly by the launcher. The helper never opens UserDefaults.
+    static let current: Self? = {
+        let args = CommandLine.arguments
+        let path = args.count >= 3 && ["--fixtures", "--validate-profile"].contains(args[1]) ? args[2] : args.count == 9 ? args[8] : ""
+        guard !path.isEmpty, let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let snapshot = try? JSONDecoder().decode(Self.self, from: data), !snapshot.profile.isLegacy else { return nil }
+        return snapshot
+    }()
+}
+
 enum BrowserVariant: String, CaseIterable {
-    case fixed, natural1, natural2, natural3
+    case fixed, natural1, natural2, natural3, settingsNatural1, settingsNatural2, settingsNatural3, personal1, personal2, personal3
     var seed: UInt64? {
-        switch self { case .fixed: return nil; case .natural1: return 1; case .natural2: return 2; case .natural3: return 3 }
+        switch self {
+        case .fixed: return nil
+        case .natural1, .settingsNatural1, .personal1: return 1
+        case .natural2, .settingsNatural2, .personal2: return 2
+        case .natural3, .settingsNatural3, .personal3: return 3
+        }
     }
-    var title: String { seed.map { "Natural rhythm · seed \($0)" } ?? "Fixed delivery check" }
+    var isPersonal: Bool { rawValue.hasPrefix("personal") }
+    var usesSnapshot: Bool { isPersonal || rawValue.hasPrefix("settingsNatural") }
+    var settings: TypingSettings {
+        var settings = usesSnapshot ? BrowserProfileSnapshot.current!.settings : TypingSettings()
+        settings.mode = isPersonal ? .personal : .natural
+        return settings
+    }
+    var profile: TypingProfile { isPersonal ? BrowserProfileSnapshot.current!.profile : .baseline(wpm: settings.wpm) }
+    var title: String {
+        guard let seed else { return "Fixed delivery check" }
+        return "\(isPersonal ? "My rhythm" : "Natural") · \(Int(settings.wpm)) WPM · seed \(seed)"
+    }
 }
 
 enum BrowserFixture: String, CaseIterable {
-    case plain, modifiers, overlap, corrections, lines, unicode, optionSymbols
+    case plain, modifiers, overlap, corrections, lines, unicode, optionSymbols, accents, longForm, richText
 
     var title: String {
         switch self {
@@ -22,6 +52,9 @@ enum BrowserFixture: String, CaseIterable {
         case .lines: return "Line breaks"
         case .unicode: return "Accents & Unicode"
         case .optionSymbols: return "Option symbols"
+        case .accents: return "Keyboard accent sequences"
+        case .longForm: return "Longer passage"
+        case .richText: return "Rich-text editor"
         }
     }
     var instructions: String {
@@ -51,29 +84,38 @@ enum BrowserFixture: String, CaseIterable {
             type("green"); expected = "cat green"
         case .lines: expected = "First line.\nSecond line."; type(expected)
         case .unicode: expected = "café — 🙂"; type(expected)
+        case .accents: expected = "café déjà vu, naïve, mañana. ÉÜ àèìòù"; type(expected)
+        case .longForm:
+            expected = "At 9:30, Maya opened the café. She wrote: \"Two teas, one coffee—please.\" Outside, the rain had stopped; a cyclist waved and turned left. Tomorrow's list included 12 cups, 24 napkins, and a new sign."; type(expected)
+        case .richText:
+            expected = "A note from the café:\nBring 12 cups, two spoons, and fresh tea.\nThank you—see you at 9:30!"; type(expected)
         case .optionSymbols:
             expected = KeyboardMap.directCharacters.filter { $0.value.option }.keys.sorted().joined(); type(expected)
         }
         let normalized = KeyTimeline.normalized(events)
         return (expected, TypingPlan(events: normalized.events, duration: normalized.duration, repairs: 0, effectiveWPM: 60))
     }
-    var variants: [BrowserVariant] { self == .plain ? BrowserVariant.allCases : [.fixed] }
+    var variants: [BrowserVariant] {
+        self == .plain ? BrowserVariant.allCases.filter { !$0.usesSnapshot || BrowserProfileSnapshot.current != nil } : [.fixed]
+    }
     func plan(variant: BrowserVariant) -> TypingPlan {
         guard let seed = variant.seed else { return fixture.plan }
-        // Use production defaults and baseline. The physical comparison sample
-        // is held out: it never supplies these settings, seeds or training data.
-        let settings = TypingSettings()
+        // Settings/profile come from defaults or the explicit frozen snapshot.
+        // The physical reference never supplies settings, seeds or training data.
         var random = SeededGenerator(seed: seed)
-        return TypingEngine.generatePlan(text: fixture.text, settings: settings, profile: .baseline(), using: &random)
+        return TypingEngine.generatePlan(text: fixture.text, settings: variant.settings, profile: variant.profile, using: &random)
     }
     func metadata(variant: BrowserVariant) -> [String: Any] {
         let plan = plan(variant: variant)
-        let settings = TypingSettings()
+        let settings = variant.settings
         let settingsObject = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(settings))) ?? NSNull()
         return ["id": variant.rawValue, "title": variant.title, "duration": plan.duration,
                 "generator": variant == .fixed ? "fixed-fixture" : "TypingEngine.generatePlan",
                 "seed": variant.seed.map { $0 as Any } ?? NSNull(),
-                "profile": variant == .fixed ? "none" : "research-baseline",
+                "profile": variant == .fixed ? "none" : variant.isPersonal ? "saved-profile-snapshot" : "research-baseline",
+                "profileSamples": variant.isPersonal ? variant.profile.sampleCount : 0,
+                "profilePairs": variant.isPersonal ? variant.profile.evidence?.pairs.count ?? 0 : 0,
+                "savedComposeMode": variant.usesSnapshot ? BrowserProfileSnapshot.current!.settings.mode.rawValue : "not used",
                 "wpm": variant == .fixed ? NSNull() : settings.wpm, "variation": variant == .fixed ? NSNull() : settings.variation,
                 "mistakeLevel": variant == .fixed ? NSNull() : settings.mistakeLevel,
                 "settings": variant == .fixed ? NSNull() : settingsObject, "repairs": plan.repairs,
@@ -82,12 +124,13 @@ enum BrowserFixture: String, CaseIterable {
     var json: [String: Any] {
         ["id": rawValue, "title": title, "instructions": instructions,
          "text": fixture.text, "duration": fixture.plan.duration,
-         "keyboardLayout": "com.apple.keylayout.US", "variants": variants.map { metadata(variant: $0) }]
+         "keyboardLayout": "com.apple.keylayout.US", "editorKind": self == .richText ? "contenteditable" : "textarea", "variants": variants.map { metadata(variant: $0) }]
     }
 }
 
-/// Temporary QA app: production scheduler/poster, fixed fixtures only. No user
-/// profiles, capture monitors, global shortcuts or persistent app preferences.
+/// Temporary QA app: production scheduler/poster and built-in passages. An
+/// optional explicit profile snapshot is read-only; no ProfileStore, capture
+/// monitor, global shortcuts or persistent app preferences are loaded.
 @MainActor
 final class BrowserPlaybackDelegate: NSObject, NSApplicationDelegate {
     let stateURL: URL, resultURL: URL, fixture: BrowserFixture, runID: String, label: String, processTargeted: Bool
@@ -115,13 +158,9 @@ final class BrowserPlaybackDelegate: NSObject, NSApplicationDelegate {
             }
             func checkFocus() -> Bool {
                 guard AXIsProcessTrusted() else { failure = "Accessibility permission is unavailable for the native checker."; return false }
-                if let input = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
-                   let property = TISGetInputSourceProperty(input, kTISPropertyInputSourceID) {
-                    let identifier = Unmanaged<CFString>.fromOpaque(property).takeUnretainedValue() as String
-                    guard identifier == "com.apple.keylayout.US" else {
-                        failure = "The fixed native fixtures require the U.S. keyboard layout."; return false
-                    }
-                } else { failure = "Cannot verify the keyboard layout."; return false }
+                guard KeyboardLayout.currentIdentifier() == "com.apple.keylayout.US" else {
+                    failure = "The fixed native fixtures require the U.S. keyboard layout."; return false
+                }
                 guard let data = try? Data(contentsOf: stateURL),
                       let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                       state["runID"] as? String == runID, state["active"] as? Bool == true,
@@ -194,11 +233,16 @@ final class BrowserPlaybackDelegate: NSObject, NSApplicationDelegate {
 struct BrowserPlaybackCheck {
     @MainActor static func main() {
         let args = CommandLine.arguments
-        if args.count == 2 && args[1] == "--fixtures" {
+        if args.count == 4 && args[1] == "--validate-profile", let snapshot = BrowserProfileSnapshot.current {
+            let report = TypingValidation.evaluate(samples: snapshot.samples, mode: .copy)
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try! encoder.encode(report).write(to: URL(fileURLWithPath: args[3])); return
+        }
+        if args.count == 3 && args[1] == "--fixtures" {
             let data = try! JSONSerialization.data(withJSONObject: BrowserFixture.allCases.map(\.json), options: [.prettyPrinted, .sortedKeys])
             print(String(decoding: data, as: UTF8.self)); return
         }
-        guard args.count == 8, let fixture = BrowserFixture(rawValue: args[3]),
+        guard args.count == 9, let fixture = BrowserFixture(rawValue: args[3]),
               let variant = BrowserVariant(rawValue: args[7]), fixture.variants.contains(variant) else { return }
         let app = NSApplication.shared
         let delegate = BrowserPlaybackDelegate(state: URL(fileURLWithPath: args[1]), result: URL(fileURLWithPath: args[2]),

@@ -184,7 +184,7 @@ struct TypingEngineTests {
         let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: .baseline(), using: &random)
         #expect(plan.events.contains { $0.flight > 8_000 })
         #expect(plan.events.allSatisfy { $0.flight <= 45_000 })
-        #expect(plan.duration == KeyTimeline.strokes(for: plan.events).map(\.releaseOffset).max())
+        #expect(plan.duration == KeyTimeline.physicalActions(for: plan.events).last?.scheduledOffset)
         #expect(apply(plan.events) == text)
     }
 

@@ -68,7 +68,7 @@ const server = http.createServer(async (req, res) => {
       active = {runID: data.runID, owner: data.owner, active: true, heartbeat: Date.now(), expiresAt: Date.now() + 90_000, scenario: data.scenario, variant: data.variant};
       nativeResult = null; lastCapture = null;
       await stateChanged();
-      const child = spawn('/usr/bin/open', ['-g', '-n', app, '--args', statePath, resultPath, data.scenario, data.runID, `${label} ${data.owner}`, args.includes('--global-hid') ? 'hid' : 'process', data.variant], {stdio: 'ignore'});
+      const child = spawn('/usr/bin/open', ['-g', '-n', app, '--args', statePath, resultPath, data.scenario, data.runID, `${label} ${data.owner}`, args.includes('--global-hid') ? 'hid' : 'process', data.variant, args[4] || ''], {stdio: 'ignore'});
       const failedLaunch = () => { if (active?.runID === data.runID) {
         active.active = false; nativeResult = {runID: data.runID, completed: false, error: 'The native checker could not be opened.'}; stateChanged().catch(() => {});
       } };

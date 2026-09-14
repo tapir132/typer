@@ -1,6 +1,7 @@
-import {SCHEMA, MAX_EVENTS, MAX_TEXT, analyzeCapture, compareCaptures} from './compare.mjs';
+import {SCHEMA, CAPTURE_FEATURES, MAX_EVENTS, MAX_TEXT, validateCapture, analyzeCapture, compareCaptures} from './compare.mjs';
 const $ = id => document.getElementById(id);
-const editor = $('editor'), owner = crypto.randomUUID(), samples = new Map();
+let editor = $('editor');
+const owner = crypto.randomUUID(), samples = new Map();
 let config, current = null, lastReport = null, heartbeatTimer, deadlineTimer, pollTimer, endingNative = false;
 
 async function request(route, data) {
@@ -11,13 +12,42 @@ async function request(route, data) {
   if (!response.ok) throw new Error(result.error || `Local checker returned ${response.status}.`);
   return result;
 }
+function textValue() {
+  if (editor.tagName === 'TEXTAREA') return editor.value;
+  // Safari innerText adds a newline after a final block even without a final
+  // Enter. Derive lines from this fixture's div/p/br editing structure. Keep
+  // the untouched innerHTML in the export so the projection is reviewable.
+  function contents(node) {
+    if (node.nodeType === Node.TEXT_NODE) return node.data;
+    if (node.nodeName === 'BR') return '\n';
+    const children = [...node.childNodes];
+    if (['DIV', 'P'].includes(node.nodeName) && children.length === 1 && children[0].nodeName === 'BR') return '';
+    let value = '', previousBlock = false;
+    for (const [index, child] of children.entries()) {
+      const block = ['DIV', 'P'].includes(child.nodeName);
+      if (index > 0 && (block || previousBlock)) value += '\n';
+      value += contents(child); previousBlock = block;
+    }
+    return value;
+  }
+  return contents(editor);
+}
+function setText(value) { if (editor.tagName === 'TEXTAREA') editor.value = value; else editor.textContent = value; }
+function editable(enabled) { if (editor.tagName === 'TEXTAREA') editor.readOnly = !enabled; else editor.contentEditable = String(enabled); }
+function selection() {
+  if (editor.tagName === 'TEXTAREA') return {selectionStart: editor.selectionStart, selectionEnd: editor.selectionEnd};
+  const s = getSelection();
+  if (!s?.rangeCount || !editor.contains(s.anchorNode) || !editor.contains(s.focusNode)) return {};
+  function offset(node, index) { const r = document.createRange(); r.selectNodeContents(editor); r.setEnd(node, index); return r.toString().length; }
+  return {selectionStart: offset(s.anchorNode, s.anchorOffset), selectionEnd: offset(s.focusNode, s.focusOffset)};
+}
 function status(message, error = false) { $('status').textContent = message; $('status').classList.toggle('error', error); }
 function fixture() { return config.fixtures.find(x => x.id === $('scenario').value); }
 function pair() { return samples.get(fixture().id) || {}; }
 function render() {
   $('scenario').disabled = !!current;
   $('variant').disabled = !!current || fixture().variants.length === 1;
-  $('reference').disabled = !!current; $('native').disabled = !!current; $('stop').disabled = !current;
+  $('import').disabled = !!current; $('reference').disabled = !!current; $('native').disabled = !!current; $('stop').disabled = !current;
   const value = pair();
   $('reference-status').textContent = value.reference ? describe(value.reference) : 'Not recorded';
   $('native-status').textContent = value.playback ? describe(value.playback) : 'Not run';
@@ -35,7 +65,11 @@ function resetReport() {
 }
 function changePassage() {
   $('instructions').textContent = fixture().instructions;
-  $('passage').textContent = fixture().text; editor.value = '';
+  $('passage').textContent = fixture().text;
+  editor = fixture().editorKind === 'contenteditable' ? $('rich-editor') : $('editor');
+  $('editor').hidden = editor !== $('editor'); $('rich-editor').hidden = editor !== $('rich-editor');
+  $('editor-label').htmlFor = editor.id;
+  setText(''); editable(false);
   $('variant').replaceChildren(...fixture().variants.map(value => {
     const option = document.createElement('option'); option.value = value.id; option.textContent = value.title; return option;
   }));
@@ -44,21 +78,23 @@ function changePassage() {
 function changeVariant() {
   $('variant-help').textContent = $('variant').value === 'fixed'
     ? 'Steady timing checks key delivery. It does not test the rhythm generator.'
-    : 'Uses Natural mode at 64 WPM with default variation and corrections. Your sample is not used for training.';
+    : `${fixture().variants.find(x => x.id === $('variant').value)?.title}. The physical reference is excluded from training.`;
   resetReport();
 }
 function start(source) {
   if (current) throw new Error('Finish the current recording first.');
   const f = fixture();
-  editor.readOnly = false; editor.value = ''; editor.focus();
+  editable(true); setText(''); editor.focus();
   if (!document.hasFocus() || document.activeElement !== editor) {
-    editor.readOnly = true;
+    editable(false);
     throw new Error('Focus the Safari test page before starting.');
   }
   current = {
     schemaVersion: SCHEMA, runID: crypto.randomUUID(), source, scenario: f.id,
     expectedText: f.text, text: '', userAgent: navigator.userAgent,
-    keyboardLayout: config.keyboardLayout, editor: 'textarea;spellcheck=false;autocorrect=off',
+    keyboardLayout: config.keyboardLayout, editor: `${f.editorKind || 'textarea'};spellcheck=false;autocorrect=off`,
+    captureFeatures: {...CAPTURE_FEATURES}, writingSuggestions: false,
+    textProjection: f.editorKind === 'contenteditable' ? 'div-p-br-v1' : 'textarea-value',
     createdAt: new Date().toISOString(), completed: false, interrupted: false, truncated: false, pasted: false,
     events: [], start: performance.now(), reason: '', native: null
   };
@@ -71,7 +107,8 @@ function finish(completed, reason = '') {
   if (!current) return;
   const capture = current; current = null;
   clearInterval(heartbeatTimer); clearInterval(pollTimer); clearTimeout(deadlineTimer); endingNative = false;
-  capture.text = editor.value.slice(0, MAX_TEXT);
+  capture.text = textValue().slice(0, MAX_TEXT);
+  if (editor.tagName !== 'TEXTAREA') capture.editorHTML = editor.innerHTML.slice(0, MAX_TEXT * 4);
   capture.completed = completed; capture.interrupted = !completed; capture.reason = reason;
   delete capture.start;
   const value = pair();
@@ -81,7 +118,7 @@ function finish(completed, reason = '') {
     request('native/capture', {owner, runID: capture.runID, capture}).catch(error => status(`Report could not be saved: ${error.message}`, true));
   } else { value.reference = capture; }
   samples.set(capture.scenario, value);
-  editor.readOnly = true;
+  editable(false);
   const analysis = analyzeCapture(capture);
   $('event-details').textContent = JSON.stringify({source: capture.source, ...analysis}, null, 2);
   status(reason || (analysis.usable ? 'Sample complete. The final text matches.' : analysis.reasons.join(' ')), !analysis.usable);
@@ -118,25 +155,29 @@ function record(event) {
     finish(current.source !== 'typer-native', current.source === 'typer-native' ? 'Playback stopped with Esc.' : ''); return;
   }
   if (event.type === 'keyup' && event.key === 'Escape') return;
-  if (current.events.length >= MAX_EVENTS || editor.value.length > MAX_TEXT) {
+  if (current.events.length >= MAX_EVENTS || textValue().length > MAX_TEXT) {
     current.truncated = true; finish(false, 'Recording reached its size limit.'); return;
   }
   const row = {type: event.type, time: performance.now() - current.start, eventTimeStamp: event.timeStamp, isTrusted: event.isTrusted};
+  for (const field of ['defaultPrevented', 'bubbles', 'cancelable', 'composed']) row[field] = event[field];
   if (event instanceof KeyboardEvent) {
-    for (const key of ['key', 'code', 'location', 'repeat', 'shiftKey', 'altKey', 'ctrlKey', 'metaKey', 'isComposing']) row[key] = event[key];
+    for (const key of ['key', 'code', 'location', 'repeat', 'shiftKey', 'altKey', 'ctrlKey', 'metaKey', 'isComposing', 'keyCode', 'charCode', 'which']) row[key] = event[key];
+    row.modifierStates = Object.fromEntries(['Shift', 'Alt', 'Control', 'Meta', 'CapsLock', 'NumLock', 'AltGraph', 'Fn'].map(key => [key, event.getModifierState(key)]));
   }
   if (event instanceof InputEvent) { row.inputType = event.inputType; row.data = event.data; row.isComposing = event.isComposing; }
   if (event instanceof CompositionEvent) row.data = event.data;
-  row.selectionStart = editor.selectionStart; row.selectionEnd = editor.selectionEnd;
-  if (event.type === 'input') row.textLength = editor.value.length;
+  Object.assign(row, selection());
+  if (event.type === 'input') row.textLength = textValue().length;
   current.events.push(row);
 }
-for (const type of ['keydown', 'keyup', 'beforeinput', 'input', 'compositionstart', 'compositionupdate', 'compositionend']) editor.addEventListener(type, record);
+for (const input of [$('editor'), $('rich-editor')]) {
+  for (const type of ['keydown', 'keyup', 'keypress', 'beforeinput', 'input', 'compositionstart', 'compositionupdate', 'compositionend']) input.addEventListener(type, record);
+}
 document.addEventListener('selectionchange', event => { if (current && document.activeElement === editor) record(event); });
-for (const type of ['paste', 'drop']) editor.addEventListener(type, event => {
+for (const input of [$('editor'), $('rich-editor')]) for (const type of ['paste', 'drop']) input.addEventListener(type, event => {
   if (current) { current.pasted = true; event.preventDefault(); finish(false, 'Pasted or dropped text cannot be used as a keyboard sample.'); }
 });
-editor.addEventListener('blur', () => { if (current) finish(false, 'Recording interrupted: focus left the editor.'); });
+for (const input of [$('editor'), $('rich-editor')]) input.addEventListener('blur', () => { if (current) finish(false, 'Recording interrupted: focus left the editor.'); });
 window.addEventListener('blur', () => { if (current) finish(false, 'Recording interrupted: Safari lost focus.'); });
 document.addEventListener('visibilitychange', () => { if (current && document.hidden) finish(false, 'Recording interrupted: the page became hidden.'); });
 window.addEventListener('pagehide', () => {
@@ -152,12 +193,13 @@ $('compare').addEventListener('click', () => {
   const {reference, playback} = pair(); lastReport = compareCaptures(reference, playback);
   const box = $('report'); box.replaceChildren();
   const title = document.createElement('strong');
-  title.textContent = !lastReport.comparable ? 'Comparison needs another sample' : lastReport.eventPropertiesMatch ? 'Complete event sequence matches' : 'Complete event sequences differ';
+  title.textContent = !lastReport.comparable ? 'Comparison needs another sample' : lastReport.eventPropertiesMatch ? 'Recorded fields match' : 'Recorded event sequences differ';
   box.append(title);
   const list = document.createElement('ul');
   const rollover = value => value == null ? 'unavailable' : `${(value * 100).toFixed(0)}%`;
   const messages = lastReport.comparable ? [
     `Final text matches in both samples.`,
+    lastReport.completeCaptureCoverage ? 'Both captures include the expanded event fields.' : 'Some fields were not recorded in the older sample; those comparisons remain unavailable.',
     `${lastReport.keyProperties.matchingGroups} of ${lastReport.keyProperties.sharedGroups} shared key groups have matching properties. ${lastReport.keyProperties.referenceOnly.length + lastReport.keyProperties.playbackOnly.length} groups appear in only one sample.`,
     `Overlapping keys: ${rollover(lastReport.reference.timing.rollover)} keyboard / ${rollover(lastReport.playback.timing.rollover)} Typer. Corrections and overlap can change event order.`,
     `Typer run: ${playback.native?.variant?.title ?? 'Fixed delivery check'}.`,
@@ -166,6 +208,27 @@ $('compare').addEventListener('click', () => {
   ] : lastReport.reasons;
   for (const text of messages) { const li = document.createElement('li'); li.textContent = text; list.append(li); }
   box.append(list); $('event-details').textContent = JSON.stringify(lastReport, null, 2);
+});
+$('import').addEventListener('click', () => $('import-file').click());
+$('import-file').addEventListener('change', async event => {
+  try {
+    if (current) throw new Error('Finish recording before loading a sample.');
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4_000_000) throw new Error('This sample file is too large.');
+    const data = JSON.parse(await file.text());
+    if (current) throw new Error('Finish recording before loading a sample.');
+    const capture = validateCapture(data.reference ?? data);
+    if (capture.source !== 'physical-keyboard-labelled') throw new Error('Load an exported physical keyboard sample. Automated traces cannot be references.');
+    const found = config.fixtures.find(f => f.id === capture.scenario && f.text === capture.expectedText);
+    if (!found) throw new Error('This sample uses a different test passage.');
+    const analysis = analyzeCapture(capture);
+    if (!analysis.usable) throw new Error(analysis.reasons.join(' '));
+    $('scenario').value = found.id; changePassage();
+    const saved = pair(); saved.reference = capture; samples.set(found.id, saved);
+    render(); status('Saved keyboard sample loaded. Run Typer, then compare. Older fields may be unavailable.');
+  } catch (error) { status(error.message, true); }
+  finally { event.target.value = ''; }
 });
 $('export').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify({schemaVersion: SCHEMA, ...pair(), comparison: lastReport}, null, 2)], {type: 'application/json'});
@@ -182,7 +245,8 @@ window.typerCheck = {
   snapshot: () => ({current, samples: [...samples.entries()], lastReport})
 };
 try {
-  config = await request('config'); editor.setAttribute('aria-label', `${config.label} ${owner}`);
+  config = await request('config');
+  for (const input of [$('editor'), $('rich-editor')]) input.setAttribute('aria-label', `${config.label} ${owner}`);
   $('scenario').replaceChildren(...config.fixtures.map(f => { const option = document.createElement('option'); option.value = f.id; option.textContent = f.title; return option; }));
   const query = new URLSearchParams(location.search);
   if (config.fixtures.some(f => f.id === query.get('scenario'))) $('scenario').value = query.get('scenario');

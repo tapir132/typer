@@ -96,6 +96,7 @@ struct PlaybackCheckReport: Codable {
     var receipts: [PlaybackReceipt]
     var limitations = [
         "This is a controlled AppKit receiver inside Typer. It uses the production scheduler, event creation and process-targeted delivery, addressed to Typer itself.",
+        "Event counts and rhythm metrics cover logical character/editing keys. Modifier and accent-prefix keys reach the editor but are excluded from these counts; final text checks their combined result.",
         "Receipt times measure when Typer handles the event. Event timestamps describe event creation/occurrence and can conceal queue delays; both are retained.",
         "This does not measure physical keyboard latency or certify delivery in another application. Input layout, IME, autocorrect and editor shortcuts can change external results.",
         "Timing errors are descriptive milliseconds, with no universal pass threshold or probability of human typing. Repeat the check under representative system load.",
@@ -109,9 +110,9 @@ struct PlaybackCheckReport: Codable {
     }
 
     static func analyze(scenario: PlaybackCheckScenario, receipts: [PlaybackReceipt], text: String,
-                        completed: Bool, interruption: String? = nil, inputSource: String = "Unknown") -> Self {
+                        completed: Bool, interruption: String? = nil, inputSource: String = "Unknown", layout: KeyboardLayout = .us) -> Self {
         let fixture = scenario.fixture
-        let strokes = KeyTimeline.strokes(for: fixture.plan.events)
+        let strokes = KeyTimeline.strokes(for: fixture.plan.events, layout: layout)
         let actions = KeyTimeline.actions(for: strokes)
         let ranks = Dictionary(uniqueKeysWithValues: actions.enumerated().map {
             ($0.element.eventIndex * 2 + ($0.element.isDown ? 0 : 1), $0.offset)
@@ -123,7 +124,7 @@ struct PlaybackCheckReport: Codable {
             guard fixture.plan.events.indices.contains(receipt.eventIndex),
                   receipt.eventOffset.isFinite, receipt.receiptOffset.isFinite,
                   let rank = ranks[receipt.identity] else { unexpected += 1; continue }
-            let key = KeyDescriptor(event: fixture.plan.events[receipt.eventIndex])
+            let key = KeyDescriptor(event: fixture.plan.events[receipt.eventIndex], layout: layout)
             guard receipt.code == key.code else { unexpected += 1; continue }
             guard accepted[receipt.identity] == nil else { duplicates += 1; continue }
             if rank < highestRank { outOfOrder += 1 }

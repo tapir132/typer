@@ -31,7 +31,7 @@ struct RealismValidationTests {
         #expect(strokes[2].pressOffset >= 200)
         let shifted = [PlannedEvent(kind: .character, value: "A", flight: 0, dwell: 100),
                        PlannedEvent(kind: .character, value: "!", flight: -40, dwell: 80)]
-        #expect(KeyTimeline.strokes(for: shifted)[1].pressOffset == 60)
+        #expect(KeyTimeline.strokes(for: shifted)[1].pressOffset - KeyTimeline.strokes(for: shifted)[0].pressOffset == 60)
     }
 
     @Test func durationIncludesTheLastReleaseEvenWhenItIsNotTheLastKey() {
@@ -47,7 +47,7 @@ struct RealismValidationTests {
                       PlannedEvent(kind: .character, value: "!", flight: -70, dwell: 130),
                       PlannedEvent(kind: .wordBackspace, flight: 40, dwell: 80),
                       PlannedEvent(kind: .character, value: "é", flight: 30, dwell: 60)]
-        let actions = KeyTimeline.actions(for: KeyTimeline.strokes(for: events))
+        let actions = KeyTimeline.physicalActions(for: events)
         for stop in 0...actions.count {
             var held: Set<UInt16> = []
             var output: [PhysicalKeyAction] = []
@@ -56,11 +56,11 @@ struct RealismValidationTests {
                 if action.isDown { held.insert(action.code) } else { held.remove(action.code) }
                 return true
             }
-            for action in actions.prefix(stop) { #expect(session.perform(action, events: events)) }
+            for action in actions.prefix(stop) { #expect(session.perform(action)) }
             session.cancel()
             #expect(held.isEmpty)
             let count = output.count
-            for action in actions { #expect(!session.perform(action, events: events)) }
+            for action in actions { #expect(!session.perform(action)) }
             #expect(output.count == count)
         }
     }
@@ -75,9 +75,10 @@ struct RealismValidationTests {
             else { held.remove(action.code) }
             return !(action.isDown && downs == 3)
         }
-        let actions = KeyTimeline.actions(for: KeyTimeline.strokes(for: events))
-        #expect(session.perform(actions[0], events: events))
-        #expect(!session.perform(actions[1], events: events))
+        let actions = KeyTimeline.physicalActions(for: events)
+        #expect(session.perform(actions[0]))
+        #expect(session.perform(actions[1]))
+        #expect(!session.perform(actions[2]))
         #expect(held.isEmpty)
     }
 
@@ -250,7 +251,7 @@ struct RealismValidationTests {
                       PlannedEvent(kind: .character, value: "b", flight: 20, dwell: 80)]
         var output: [PhysicalKeyAction] = []
         let session = PlaybackSession { output.append($0); return true }
-        for action in KeyTimeline.actions(for: KeyTimeline.strokes(for: events)) { #expect(session.perform(action, events: events)) }
+        for action in KeyTimeline.physicalActions(for: events) { #expect(session.perform(action)) }
         let letters = output.filter { $0.isDown && $0.code != 56 && $0.code != 58 }
         #expect(letters.map(\.shift) == [true, true, false, false, false])
         #expect(letters.map(\.option) == [false, false, false, true, false])

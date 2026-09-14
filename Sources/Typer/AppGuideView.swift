@@ -137,6 +137,7 @@ struct AppGuideView: View {
             section("Nothing gets typed", "Check Accessibility in General. During the countdown, switch to another app and click an editable field. Try a short Clean-mode run in a plain-text document.")
             section("Typing goes to the wrong place", "Stop with \(shortcuts.stopDescription). Typer pauses when you switch apps, but can't detect every cursor or field change inside one app.")
             section("Pause won't resume", "Return to the original app and the same field, then press \(shortcuts.bindings.pause.displayText). If the document changed, stop and check the partial text before starting again.")
+            section("Keyboard layouts and accents", "Typer follows your selected keyboard layout and uses its accent keys where available. Changing layouts stops playback. Emoji and characters without a key sequence use Unicode input. IMEs and editor shortcuts still need a short test in your target app.")
             section("Corrections look wrong", "Try Clean first. Autocorrect, keyboard layouts, formatting, and editor shortcuts can change how keys are handled.")
             section("Save or validation is unavailable", "Keep typing until Save is enabled. Validation needs four eligible sessions in one mode. Mixed modes and Legacy samples don't qualify together.")
             section("Live capture shows no typing", "Check Input Monitoring and click Start live capture. Type outside Typer. Secure Input pauses recording; the session ends after one hour.")

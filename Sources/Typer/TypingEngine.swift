@@ -177,6 +177,10 @@ enum TypingEngine {
         guard !text.isEmpty else { return TypingPlan(events: [], duration: 0, repairs: 0, effectiveWPM: 0) }
         let sourceCharacterCount = text.count
         let wpm = settings.wpm.isFinite ? min(180, max(20, settings.wpm)) : 64
+        // Preserve the recorded pace before summary shrinkage. At a profile's
+        // own WPM its observed motor intervals must stay at their learned scale;
+        // 12000/WPM includes a different mix of pauses/corrections than a median.
+        let recordedWPM = profile.wpm
         let profile = profile.stabilized(wpm: wpm)
         let realism = settings.variation.isFinite ? min(1, max(0, settings.variation)) : 0.78
         let base = 12_000 / wpm
@@ -185,7 +189,9 @@ enum TypingEngine {
             ? (evidence?.pauseContexts ?? [:]).filter { $0.value.isSupported } : [:]
         let baselineDigraphs = TypingProfile.baseline().digraphs
         let empiricalCenter = median(evidence?.pairs.values.filter(\.isValid).map(\.interval) ?? [])
-        let learnedScale = base / max(40, empiricalCenter > 0 ? empiricalCenter : profile.medianInterval)
+        let learnedScale = recordedWPM.isFinite && (20...180).contains(recordedWPM)
+            ? recordedWPM / wpm
+            : base / max(40, empiricalCenter > 0 ? empiricalCenter : profile.medianInterval)
         let pooled = PairDistribution(evidence?.pairs.values ?? [], count: evidence?.pairs.count)
         let transitions = evidence?.transitions.mapValues { PairDistribution($0.values, count: $0.count) } ?? [:]
         let exactPairs = evidence?.digraphPairs.mapValues { PairDistribution($0.values, count: $0.count) } ?? [:]
@@ -214,11 +220,7 @@ enum TypingEngine {
         func sampled(_ distribution: PairDistribution?, parent: TimingPair, pseudocount: Double) -> TimingPair {
             let draw = unit() // A fixed draw count keeps mistake choices independent of variation.
             guard let distribution, !distribution.values.isEmpty else { return parent }
-            let value = distribution.values[min(distribution.values.count - 1, Int(draw * Double(distribution.values.count)))]
-            let n = Double(min(2_000, max(0, distribution.count)))
-            let weight = min(0.95, n / (n + pseudocount))
-            return TimingPair(interval: parent.interval + (value.interval * learnedScale - parent.interval) * weight,
-                              priorDwell: parent.priorDwell + (value.priorDwell - parent.priorDwell) * weight)
+            return distribution.sample(fallback: parent, intervalScale: learnedScale, draw: draw, pseudocount: pseudocount)
         }
 
         func cadence(for character: String) -> TimingPair {

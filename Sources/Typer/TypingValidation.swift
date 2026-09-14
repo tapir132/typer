@@ -55,7 +55,7 @@ struct ValidationTrial: Codable, Equatable {
 
 struct ValidationReport: Codable, Equatable {
     var schemaVersion = 2
-    var modelVersion = "paired-timing-v4-active-live-capture"
+    var modelVersion = "paired-timing-v5-predictive-mixture"
     var createdAt: Date
     var context: String
     var eligibleSessions: Int

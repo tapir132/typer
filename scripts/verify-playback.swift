@@ -44,13 +44,63 @@ final class PlaybackVerificationDelegate: NSObject, NSApplicationDelegate {
                         throw Failure.message("\(scenario.rawValue): received \(report.receivedText.debugDescription); missing \(report.missingEvents); order \(report.outOfOrderEvents); flags \(report.modifierMismatches); \(report.interruption ?? "no interruption")")
                     }
                 }
-                try JSONSerialization.data(withJSONObject: ["passed": true, "scenarios": 3], options: [.prettyPrinted]).write(to: output.appendingPathComponent("result.json"))
+                for control in ["pause", "cancel", "failure"] { try await verifyCompositionControl(control) }
+                try JSONSerialization.data(withJSONObject: ["passed": true, "scenarios": 3, "compositionControls": ["pause", "cancel", "failure"]], options: [.prettyPrinted]).write(to: output.appendingPathComponent("result.json"))
             } catch {
                 try? JSONSerialization.data(withJSONObject: ["passed": false, "error": String(describing: error)], options: [.prettyPrinted]).write(to: output.appendingPathComponent("result.json"))
             }
             controller.close()
             window.close()
             NSApp.terminate(nil)
+        }
+    }
+
+    private func verifyCompositionControl(_ control: String) async throws {
+        guard let receiver = controller.receiver else { throw Failure.message("No composition receiver.") }
+        receiver.string = ""; receiver.setSelectedRange(NSRange(location: 0, length: 0))
+        let marker = PlaybackCheckRouter.signature | (Int64(UInt32.random(in: 1...UInt32.max)) << 16)
+        let source = CGEventSource(stateID: .privateState)
+        let normalized = KeyTimeline.normalized("éa".map { PlannedEvent(kind: .character, value: String($0), flight: 100, dwell: 100) })
+        let plan = TypingPlan(events: normalized.events, duration: normalized.duration, repairs: 0, effectiveWPM: 0)
+        let session = PlaybackSession { action in
+            if control == "failure" && action.isDown && action.eventIndex == 0 { return false }
+            guard let event = KeyboardEventPoster.make(action, source: source, marker: marker) else { return false }
+            KeyboardEventPoster.post(event, to: ProcessInfo.processInfo.processIdentifier); return true
+        }
+        var triggered = false, finished = false, outcome: PlaybackSession.Outcome?
+        guard PlaybackCheckRouter.shared.acquire(owner: self, route: { event, tag in
+            guard tag == marker else { return }
+            receiver.isEditable = true
+            if event.type == .keyDown { receiver.keyDown(with: event) }
+            if event.type == .keyUp { receiver.keyUp(with: event) }
+            receiver.isEditable = false
+            if !triggered && event.type == .keyUp && event.keyCode == 14 && event.modifierFlags.contains(.option) {
+                triggered = true
+                if control == "pause" { session.pause() }
+                if control == "cancel" { session.cancel() }
+            }
+        }, userInput: { _ in false }) else { throw Failure.message("Composition receiver is busy.") }
+        defer { session.cancel(); PlaybackCheckRouter.shared.release(owner: self) }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = session.run(plan: plan)
+            DispatchQueue.main.async { outcome = result; finished = true }
+        }
+        let deadline = Date().addingTimeInterval(5)
+        while !triggered && Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        guard triggered else { throw Failure.message("No accent prefix arrived for \(control).") }
+        if control == "pause" {
+            try await Task.sleep(for: .milliseconds(180))
+            guard receiver.string.isEmpty && !receiver.hasMarkedText() else {
+                throw Failure.message("Pause left composition pending: \(receiver.string.debugDescription)")
+            }
+            session.resume()
+        }
+        while !finished && Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        try await Task.sleep(for: .milliseconds(300))
+        let expected = control == "pause" ? "éa" : ""
+        guard finished, receiver.string == expected, !receiver.hasMarkedText(),
+              outcome == (control == "pause" ? .complete : control == "cancel" ? .cancelled : .failed) else {
+            throw Failure.message("Accent \(control): received \(receiver.string.debugDescription), marked \(receiver.hasMarkedText()), finished \(finished).")
         }
     }
 

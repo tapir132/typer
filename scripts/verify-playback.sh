@@ -14,7 +14,7 @@ cd "$PROJECT_ROOT"
 swiftc -swift-version 5 -warnings-as-errors -parse-as-library \
   Sources/Typer/Models.swift Sources/Typer/GlobalTrainingCapture.swift Sources/Typer/Theme.swift Sources/Typer/HelpTip.swift \
   Sources/Typer/TimingEvidence.swift Sources/Typer/PauseLearning.swift Sources/Typer/TypingEngine.swift \
-  Sources/Typer/KeyTimeline.swift Sources/Typer/ShortcutBinding.swift Sources/Typer/ShortcutManager.swift Sources/Typer/TypingController.swift \
+  Sources/Typer/KeyboardLayout.swift Sources/Typer/KeyTimeline.swift Sources/Typer/ShortcutBinding.swift Sources/Typer/ShortcutManager.swift Sources/Typer/TypingController.swift \
   Sources/Typer/TrackingTextView.swift Sources/Typer/TypingScreenOverlay.swift Sources/Typer/PlaybackCheck.swift \
   Sources/Typer/PlaybackCheckController.swift Sources/Typer/PlaybackCheckView.swift \
   scripts/verify-playback.swift -o "$APP_BUNDLE/Contents/MacOS/TyperPlaybackCheck"

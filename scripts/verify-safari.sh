@@ -9,8 +9,8 @@ mkdir -p "$APP_BUNDLE/Contents/MacOS" "$OUTPUT"
 cd "$PROJECT_ROOT"
 swiftc -swift-version 5 -warnings-as-errors -parse-as-library \
   Sources/Typer/Models.swift Sources/Typer/GlobalTrainingCapture.swift Sources/Typer/Theme.swift Sources/Typer/HelpTip.swift \
-  Sources/Typer/TimingEvidence.swift Sources/Typer/PauseLearning.swift Sources/Typer/TypingEngine.swift \
-  Sources/Typer/KeyTimeline.swift Sources/Typer/ShortcutBinding.swift Sources/Typer/ShortcutManager.swift Sources/Typer/TypingController.swift \
+  Sources/Typer/TimingEvidence.swift Sources/Typer/PauseLearning.swift Sources/Typer/TypingEngine.swift Sources/Typer/TypingValidation.swift \
+  Sources/Typer/KeyboardLayout.swift Sources/Typer/KeyTimeline.swift Sources/Typer/ShortcutBinding.swift Sources/Typer/ShortcutManager.swift Sources/Typer/TypingController.swift \
   Sources/Typer/TrackingTextView.swift Sources/Typer/TypingScreenOverlay.swift \
   scripts/browser-check/native.swift -o "$APP_BUNDLE/Contents/MacOS/TyperBrowserCheck"
 if [[ "${1:-}" == "--compile-only" ]]; then
@@ -24,7 +24,13 @@ INPUT_SOURCE="$(defaults read com.apple.HIToolbox AppleCurrentKeyboardLayoutInpu
 if [[ "$INPUT_SOURCE" != "com.apple.keylayout.US" ]]; then
   echo "These fixed keyboard fixtures currently require the U.S. input layout. Current: $INPUT_SOURCE" >&2; exit 1
 fi
-"$APP_BUNDLE/Contents/MacOS/TyperBrowserCheck" --fixtures > "$QA_ROOT/fixtures.json"
+PROFILE_SNAPSHOT=""
+if (( ${@[(Ie)--with-saved-profile]} )); then
+  PROFILE_SNAPSHOT="$QA_ROOT/private-profile.json"
+  python3 scripts/browser-check/export-profile.py "$PROFILE_SNAPSHOT"
+  "$APP_BUNDLE/Contents/MacOS/TyperBrowserCheck" --validate-profile "$PROFILE_SNAPSHOT" "$OUTPUT/held-out-validation.json"
+fi
+"$APP_BUNDLE/Contents/MacOS/TyperBrowserCheck" --fixtures "$PROFILE_SNAPSHOT" > "$QA_ROOT/fixtures.json"
 cat > "$APP_BUNDLE/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -44,4 +50,4 @@ codesign --force --sign 'Cadence Signing' "$APP_BUNDLE"
 SERVER_ARGS=()
 if (( ! ${@[(Ie)--no-open]} )); then SERVER_ARGS+=(--open); fi
 if (( ${@[(Ie)--global-hid]} )); then SERVER_ARGS+=(--global-hid); fi
-node scripts/browser-check/server.mjs "$APP_BUNDLE" "$QA_ROOT/fixtures.json" "$QA_ROOT" "$OUTPUT" "${SERVER_ARGS[@]}"
+node scripts/browser-check/server.mjs "$APP_BUNDLE" "$QA_ROOT/fixtures.json" "$QA_ROOT" "$OUTPUT" "$PROFILE_SNAPSHOT" "${SERVER_ARGS[@]}"

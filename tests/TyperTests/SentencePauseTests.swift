@@ -39,7 +39,7 @@ struct SentencePauseTests {
             }
             #expect(prefixes == expectedPrefixes, "Wrong sentence boundaries for \(text.debugDescription)")
             #expect(plan.events.map(\.value).joined() == text)
-            #expect(plan.duration == KeyTimeline.strokes(for: plan.events).map(\.releaseOffset).max())
+            #expect(plan.duration == KeyTimeline.physicalActions(for: plan.events).last?.scheduledOffset)
         }
     }
 

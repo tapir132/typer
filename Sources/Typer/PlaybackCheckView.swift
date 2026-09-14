@@ -98,7 +98,7 @@ struct PlaybackCheckView: View {
             if !report.textMatches {
                 Text("Expected: \(report.expectedText.debugDescription)")
                     .font(.system(size: 11, design: .monospaced)).textSelection(.enabled)
-                Text("If no text arrived, check Accessibility permission. If characters differ, check your keyboard layout or input method; playback currently maps physical keys as US QWERTY.")
+                Text("If no text arrived, check Accessibility permission. If characters differ, check your input method or editor substitutions. Playback follows the keyboard layout selected when the run starts.")
                     .font(.caption).foregroundStyle(TyperTheme.mutedStrong)
             }
             HStack(spacing: 4) {

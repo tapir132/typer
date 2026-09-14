@@ -19,6 +19,18 @@ struct PairDistribution: Codable, Equatable {
         self.count = valid.isEmpty ? 0 : max(valid.count, count ?? valid.count)
     }
 
+    /// Posterior predictive mixture: choose a whole observed pair or the
+    /// fallback draw. Averaging independent random draws shrinks their variance
+    /// and can erase fast/slow modes and rollover even with strong evidence.
+    func sample(fallback: TimingPair, intervalScale: Double, draw: Double, pseudocount: Double) -> TimingPair {
+        let n = Double(min(2_000, max(0, count)))
+        let weight = min(0.95, n / (n + max(1, pseudocount)))
+        guard !values.isEmpty, draw.isFinite, draw >= 0, draw < weight, intervalScale.isFinite, intervalScale > 0 else { return fallback }
+        let index = min(values.count - 1, Int(draw / weight * Double(values.count)))
+        let value = values[index]
+        return TimingPair(interval: value.interval * intervalScale, priorDwell: value.priorDwell)
+    }
+
     var confidence: Double { min(0.95, Double(min(max(0, count), 2_000)) / Double(min(max(0, count), 2_000) + 24)) }
 }
 

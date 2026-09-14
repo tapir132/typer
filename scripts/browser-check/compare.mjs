@@ -1,7 +1,9 @@
 export const SCHEMA = 1;
 export const MAX_EVENTS = 5000;
 export const MAX_TEXT = 4096;
-const TYPES = new Set(['keydown', 'keyup', 'beforeinput', 'input', 'compositionstart', 'compositionupdate', 'compositionend', 'selectionchange']);
+const TYPES = new Set(['keydown', 'keyup', 'keypress', 'beforeinput', 'input', 'compositionstart', 'compositionupdate', 'compositionend', 'selectionchange']);
+export const CAPTURE_FEATURES = {keypress: true, legacyKeyboard: true, eventFlags: true, modifierStates: true};
+const FEATURE_FIELDS = {legacyKeyboard: ['keyCode', 'charCode', 'which'], eventFlags: ['defaultPrevented', 'bubbles', 'cancelable', 'composed'], modifierStates: ['modifierStates']};
 const SIGNATURE_FIELDS = ['type', 'key', 'code', 'location', 'repeat', 'shiftKey', 'altKey', 'ctrlKey', 'metaKey', 'isComposing', 'inputType', 'data', 'isTrusted'];
 
 export function validateCapture(sample) {
@@ -20,10 +22,23 @@ export function validateCapture(sample) {
     for (const key of ['key', 'code', 'inputType', 'data']) {
       if (event[key] != null && (typeof event[key] !== 'string' || event[key].length > MAX_TEXT)) throw new Error(`Invalid event ${key}.`);
     }
-    if (event.type === 'keydown' || event.type === 'keyup') {
+    if (['keydown', 'keyup', 'keypress'].includes(event.type)) {
       if (typeof event.code !== 'string' || typeof event.key !== 'string' || !Number.isInteger(event.location) || event.location < 0 || event.location > 3) throw new Error('Invalid keyboard identity.');
       for (const key of ['repeat', 'shiftKey', 'altKey', 'ctrlKey', 'metaKey', 'isComposing']) {
         if (typeof event[key] !== 'boolean') throw new Error(`Missing keyboard ${key}.`);
+      }
+    }
+  }
+  for (const [feature, enabled] of Object.entries(sample.captureFeatures || {})) {
+    if (typeof enabled !== 'boolean') throw new Error('Invalid capture feature coverage.');
+    if (!enabled || feature === 'keypress' || !FEATURE_FIELDS[feature]) continue;
+    const events = sample.events.filter(e => feature === 'eventFlags' || ['keydown', 'keyup', 'keypress'].includes(e.type));
+    for (const event of events) for (const field of FEATURE_FIELDS[feature]) {
+      const value = event[field];
+      if (feature === 'legacyKeyboard' ? !Number.isInteger(value) || value < 0
+        : feature === 'eventFlags' ? typeof value !== 'boolean'
+        : !value || typeof value !== 'object' || !['Shift', 'Alt', 'Control', 'Meta', 'CapsLock', 'NumLock', 'AltGraph', 'Fn'].every(k => typeof value[k] === 'boolean')) {
+        throw new Error(`Declared ${feature} coverage is missing valid ${field}.`);
       }
     }
   }
@@ -112,23 +127,23 @@ export function wasserstein(a, b) {
   return area;
 }
 
-function structuralEvents(sample) {
+function structuralEvents(sample, keypress) {
   // Selection notifications can be coalesced by the browser event loop. Keep
   // them in raw exports, but do not impose key-for-key equality on them.
-  return sample.events.filter(x => x.type !== 'selectionchange');
+  return sample.events.filter(x => x.type !== 'selectionchange' && (keypress || x.type !== 'keypress'));
 }
 
 // Compare properties for a shared logical key separately from event order.
 // Keep code/location in the signature so wrong physical mappings remain visible.
 // Counts, one-sided groups and the strict positional diff are retained: grouping
 // must never turn missing keys or changed correction sequences into a full match.
-function groupedProperties(reference, playback, inputEvents = false) {
+function groupedProperties(reference, playback, inputEvents = false, fields = SIGNATURE_FIELDS, keypress = false) {
   function groups(sample) {
     const result = new Map();
     for (const event of sample.events) {
-      if (!(inputEvents ? ['beforeinput', 'input'] : ['keydown', 'keyup']).includes(event.type)) continue;
+      if (!(inputEvents ? ['beforeinput', 'input'] : keypress ? ['keydown', 'keyup', 'keypress'] : ['keydown', 'keyup']).includes(event.type)) continue;
       const identity = JSON.stringify(inputEvents ? [event.type, event.inputType, event.data ?? null] : [event.type, event.key]);
-      const signature = JSON.stringify(Object.fromEntries(SIGNATURE_FIELDS.map(key => [key, event[key] ?? null])));
+      const signature = JSON.stringify(Object.fromEntries(fields.map(key => [key, canonical(event[key])])));
       if (!result.has(identity)) result.set(identity, {count: 0, signatures: new Set()});
       const group = result.get(identity); group.count++; group.signatures.add(signature);
     }
@@ -149,6 +164,12 @@ function groupedProperties(reference, playback, inputEvents = false) {
     playbackOnly: [...right.keys()].filter(key => !left.has(key)).map(x => JSON.parse(x))};
 }
 
+function canonical(value) {
+  if (value == null) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) return Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])]));
+  return value;
+}
+
 export function compareCaptures(reference, playback) {
   const a = analyzeCapture(reference), b = analyzeCapture(playback);
   const reasons = [...a.reasons.map(x => `Reference: ${x}`), ...b.reasons.map(x => `Typer: ${x}`)];
@@ -157,12 +178,21 @@ export function compareCaptures(reference, playback) {
   for (const field of ['scenario', 'expectedText', 'userAgent', 'keyboardLayout', 'editor']) {
     if (reference[field] !== playback[field]) reasons.push(`Samples have different ${field}.`);
   }
-  const left = structuralEvents(reference), right = structuralEvents(playback), differences = [];
+  for (const field of ['writingSuggestions', 'textProjection']) {
+    if (reference[field] != null && playback[field] != null && reference[field] !== playback[field]) reasons.push(`Samples have different ${field}.`);
+  }
+  const fieldCoverage = Object.fromEntries(Object.keys(CAPTURE_FEATURES).map(feature => [feature, {
+    reference: reference.captureFeatures?.[feature] === true, playback: playback.captureFeatures?.[feature] === true,
+    compared: reference.captureFeatures?.[feature] === true && playback.captureFeatures?.[feature] === true
+  }]));
+  const comparedFields = [...SIGNATURE_FIELDS, ...Object.entries(FEATURE_FIELDS).filter(([feature]) => fieldCoverage[feature].compared).flatMap(([, fields]) => fields)];
+  const keypress = fieldCoverage.keypress.compared;
+  const left = structuralEvents(reference, keypress), right = structuralEvents(playback, keypress), differences = [];
   // A bounded, positional diff deliberately does not hide inserted/dropped
   // events through realignment. Report the first differences and total count.
   let differingEvents = 0;
   for (let i = 0; i < Math.max(left.length, right.length); i++) {
-    const fields = !left[i] || !right[i] ? ['event missing'] : SIGNATURE_FIELDS.filter(key => (left[i][key] ?? null) !== (right[i][key] ?? null));
+    const fields = !left[i] || !right[i] ? ['event missing'] : comparedFields.filter(key => JSON.stringify(canonical(left[i][key])) !== JSON.stringify(canonical(right[i][key])));
     if (fields.length) {
       differingEvents++;
       if (differences.length < 30) differences.push({index: i, fields, reference: left[i] ?? null, playback: right[i] ?? null});
@@ -178,9 +208,11 @@ export function compareCaptures(reference, playback) {
     schemaVersion: SCHEMA, comparable: reasons.length === 0, reasons,
     eventPropertiesMatch: reasons.length === 0 ? differingEvents === 0 : null,
     differingEvents, differences, reference: a, playback: b, timing,
-    keyProperties: groupedProperties(reference, playback), inputProperties: groupedProperties(reference, playback, true),
+    keyProperties: groupedProperties(reference, playback, false, comparedFields, keypress), inputProperties: groupedProperties(reference, playback, true, comparedFields),
+    fieldCoverage, completeCaptureCoverage: Object.values(fieldCoverage).every(x => x.compared),
     playbackVariant: playback.native?.variant ?? null,
     limitations: [
+      'Older captures do not contain every field added later. Missing coverage is unavailable, never evidence of a match. Sequence and shared-key comparisons use only fields captured in both samples.',
       'Physical provenance is the user’s label; a webpage cannot authenticate keyboard hardware.',
       'Matching recorded properties does not establish indistinguishability to other observers or applications.',
       'Timing distances are descriptive, with no human probability or universal pass threshold; one passage is not a held-out human study.',

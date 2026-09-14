@@ -79,6 +79,7 @@ final class PlaybackCheckController: ObservableObject {
     private var drainTask: Task<Void, Never>?
     private var activeObserver: NSObjectProtocol?
     private var inputSource = "Unknown"
+    private var runLayout: KeyboardLayout = .us
     private let requiresFocus: Bool
     private let queue = DispatchQueue(label: "typer.playback-check", qos: .userInitiated)
 
@@ -89,6 +90,10 @@ final class PlaybackCheckController: ObservableObject {
     func start() {
         guard AXIsProcessTrusted() else {
             status = "Enable Typer in System Settings → Privacy & Security → Accessibility, then run the check again."
+            return
+        }
+        guard let layout = KeyboardLayout.current() else {
+            status = "Choose a keyboard layout before running this check. The current input method does not expose direct key mappings."
             return
         }
         guard !isRunning, let receiver, let window = receiver.window,
@@ -116,7 +121,12 @@ final class PlaybackCheckController: ObservableObject {
         inputSource = Self.currentInputSource()
         let transport = PlaybackCheckTransport()
         self.transport = transport
-        let session = PlaybackSession { transport.post($0) }
+        runLayout = layout
+        let layoutGuard = PlaybackLayoutGuard(identifier: layout.identifier)
+        let session = PlaybackSession(layout: layout) { action in
+            guard !action.isDown || layoutGuard.isCurrent else { return false }
+            return transport.post(action)
+        }
         self.session = session
         isRunning = true
         status = "Running \(scenario.rawValue.lowercased())… Press Escape or Stop check to stop."
@@ -163,15 +173,15 @@ final class PlaybackCheckController: ObservableObject {
             return
         }
         let identifier = Int(marker & 65_535) - 1
-        guard identifier >= 0, event.type == .keyDown || event.type == .keyUp, let origin = transport.startedAt() else { return }
+        guard event.type == .keyDown || event.type == .keyUp, let origin = transport.startedAt() else { return }
         guard receipts.count < runScenario.fixture.plan.events.count * 4 + 32 else {
             stop(reason: "Unexpected extra events were received. Run the check again.")
             return
         }
-        receipts.append(PlaybackReceipt(eventIndex: identifier / 2, isDown: event.type == .keyDown, code: event.keyCode,
+        if identifier >= 0 { receipts.append(PlaybackReceipt(eventIndex: identifier / 2, isDown: event.type == .keyDown, code: event.keyCode,
                                         shift: event.modifierFlags.contains(.shift), option: event.modifierFlags.contains(.option),
                                         eventOffset: (event.timestamp - origin) * 1_000,
-                                        receiptOffset: (ProcessInfo.processInfo.systemUptime - origin) * 1_000))
+                                        receiptOffset: (ProcessInfo.processInfo.systemUptime - origin) * 1_000)) }
         // Normal NSTextView interpretation exercises real deletion, selection,
         // Unicode input and text handling. The event is consumed by the router.
         receiver.isEditable = true
@@ -184,7 +194,7 @@ final class PlaybackCheckController: ObservableObject {
         drainTask?.cancel(); drainTask = nil
         transport?.disable()
         var result = PlaybackCheckReport.analyze(scenario: runScenario, receipts: receipts, text: receiver?.string ?? "",
-                                                completed: completed, interruption: interruption, inputSource: inputSource)
+                                                completed: completed, interruption: interruption, inputSource: inputSource, layout: runLayout)
         if !requiresFocus {
             result.limitations.append("This automated run used an isolated background receiver. The user-facing check requires foreground focus; this run does not test that focus policy.")
         }

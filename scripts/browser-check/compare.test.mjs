@@ -180,3 +180,55 @@ test('generator variant metadata survives the report without training claims', (
   assert.deepEqual(result.playbackVariant, playback.native.variant);
   assert.equal(compareCaptures(sample('browser-automation'), playback).eventPropertiesMatch, null);
 });
+
+function expanded(source) {
+  const capture = sample(source);
+  capture.captureFeatures = {keypress: true, legacyKeyboard: true, eventFlags: true, modifierStates: true};
+  for (const event of capture.events) {
+    Object.assign(event, {defaultPrevented: false, bubbles: true, cancelable: event.type !== 'input', composed: true});
+    if (['keydown', 'keyup'].includes(event.type)) {
+      Object.assign(event, {keyCode: event.key.toUpperCase().charCodeAt(0), charCode: 0, which: event.key.toUpperCase().charCodeAt(0),
+        modifierStates: Object.fromEntries(['Shift', 'Alt', 'Control', 'Meta', 'CapsLock', 'NumLock', 'AltGraph', 'Fn'].map(k => [k, false]))});
+    }
+  }
+  return capture;
+}
+test('older references retain common comparisons with new fields explicitly unavailable', () => {
+  const report = compareCaptures(sample(), expanded('typer-native'));
+  assert.equal(report.eventPropertiesMatch, true);
+  assert.equal(report.completeCaptureCoverage, false);
+  assert.equal(report.fieldCoverage.legacyKeyboard.compared, false);
+  assert.equal(report.keyProperties.differingGroups, 0);
+});
+test('legacy values and modifier state differences cannot hide behind matching text', () => {
+  for (const field of ['keyCode', 'charCode', 'which', 'defaultPrevented', 'modifierStates']) {
+    const a = expanded('physical-keyboard-labelled'), b = expanded('typer-native');
+    if (field === 'modifierStates') b.events[0].modifierStates.CapsLock = true;
+    else b.events[0][field] = field === 'defaultPrevented' ? true : 999;
+    const report = compareCaptures(a, b);
+    assert.equal(report.completeCaptureCoverage, true);
+    assert.equal(report.eventPropertiesMatch, false);
+    assert.equal(report.keyProperties.differingGroups, 1);
+  }
+});
+test('keypress participates only when both samples recorded that event type', () => {
+  const a = expanded('physical-keyboard-labelled'), b = expanded('typer-native');
+  b.events.splice(1, 0, {...b.events[0], type: 'keypress', time: 0.5, charCode: 97, which: 97});
+  assert.equal(compareCaptures(a, b).eventPropertiesMatch, false);
+  const old = sample();
+  const report = compareCaptures(old, b);
+  assert.equal(report.eventPropertiesMatch, true);
+  assert.equal(report.fieldCoverage.keypress.compared, false);
+  assert.equal(report.playback.counts.keypress, 1);
+});
+test('incomplete declared coverage is rejected rather than silently compared', () => {
+  const value = expanded('typer-native'); delete value.events[0].which;
+  assert.throws(() => validateCapture(value), /coverage/);
+  value.events[0].which = -1;
+  assert.throws(() => validateCapture(value), /coverage/);
+});
+test('modifier object ordering cannot manufacture differences', () => {
+  const a = expanded('physical-keyboard-labelled'), b = expanded('typer-native');
+  b.events[0].modifierStates = Object.fromEntries(Object.entries(b.events[0].modifierStates).reverse());
+  assert.equal(compareCaptures(a, b).eventPropertiesMatch, true);
+});

@@ -176,11 +176,20 @@ final class TypingController: ObservableObject {
             state = .error("Focus the target application before typing starts.")
             return
         }
+        guard let layout = KeyboardLayout.current() else {
+            shortcuts.finishPlayback()
+            state = .error("Choose a keyboard layout such as U.S., British or French before typing. This input method does not expose a direct key layout.")
+            return
+        }
+        let layoutGuard = PlaybackLayoutGuard(identifier: layout.identifier)
+        let originalField = KeyboardEventPoster.focusedElement(in: target.processIdentifier)
         self.target = target
         state = .typing
         progress = PlaybackProgress(remaining: plan.duration / 1_000)
         let source = CGEventSource(stateID: .privateState)
-        let session = PlaybackSession { action in
+        let session = PlaybackSession(layout: layout) { action in
+            if action.isDown && !layoutGuard.isCurrent { return false }
+            if action.isCompositionCleanup && !KeyboardEventPoster.canCleanUpComposition(in: target.processIdentifier, field: originalField) { return false }
             guard let event = KeyboardEventPoster.make(action, source: source) else { return false }
             // Bind this run, including cleanup releases, to its chosen app.
             // The global HID route can have modifier combinations intercepted
@@ -209,7 +218,7 @@ final class TypingController: ObservableObject {
                 switch outcome {
                 case .complete: self.state = .complete
                 case .cancelled: self.state = .stopped
-                case .failed: self.state = .error("A keyboard event could not be created. Playback stopped and held keys were released.")
+                case .failed: self.state = .error("Typing stopped because the keyboard layout changed or a key could not be sent. Check the field for an unfinished accent before starting again.")
                 }
             }
         }
@@ -220,6 +229,21 @@ final class TypingController: ObservableObject {
 /// The diagnostic receiver and cross-app playback share the same event creation.
 /// Only the destination differs: the diagnostic posts to Typer's process alone.
 enum KeyboardEventPoster {
+    static func focusedElement(in processID: pid_t) -> AXUIElement? {
+        let app = AXUIElementCreateApplication(processID)
+        AXUIElementSetMessagingTimeout(app, 0.2)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return unsafeBitCast(value, to: AXUIElement.self)
+    }
+
+    static func canCleanUpComposition(in processID: pid_t, field: AXUIElement?) -> Bool {
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == processID,
+              let field, let current = focusedElement(in: processID) else { return false }
+        return CFEqual(field, current)
+    }
+
     static func post(_ event: CGEvent, to processID: pid_t) {
         event.postToPid(processID)
     }
@@ -237,74 +261,5 @@ enum KeyboardEventPoster {
         }
         event.setIntegerValueField(.eventSourceUserData, value: marker)
         return event
-    }
-}
-
-enum KeyboardMap {
-    private static let base: [Character: CGKeyCode] = [
-        "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9,
-        "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17, "1": 18, "2": 19,
-        "3": 20, "4": 21, "6": 22, "5": 23, "=": 24, "9": 25, "7": 26, "-": 27, "8": 28,
-        "0": 29, "]": 30, "o": 31, "u": 32, "[": 33, "i": 34, "p": 35, "l": 37, "j": 38,
-        "'": 39, "k": 40, ";": 41, "\\": 42, ",": 43, "/": 44, "n": 45, "m": 46, ".": 47,
-        "`": 50, " ": 49
-    ]
-    private static let shifted: [Character: Character] = [
-        "!": "1", "@": "2", "#": "3", "$": "4", "%": "5", "^": "6", "&": "7", "*": "8",
-        "(": "9", ")": "0", "_": "-", "+": "=", "{": "[", "}": "]", "|": "\\", ":": ";",
-        "\"": "'", "<": ",", ">": ".", "?": "/", "~": "`"
-    ]
-
-    // Known mappings remain available if the installed layout cannot be read.
-    private static let optionCharacters: [Character: (code: CGKeyCode, shift: Bool)] = [
-        "–": (27, false), "—": (27, true),
-        "“": (33, false), "”": (33, true),
-        "‘": (30, false), "’": (30, true),
-        "…": (41, false), "•": (28, false), "°": (28, true),
-        "©": (5, false), "®": (15, false), "™": (19, false),
-        "£": (20, false), "€": (19, true)
-    ]
-
-    typealias Key = (code: CGKeyCode, shift: Bool, option: Bool)
-
-    // Read Apple's U.S. layout once. Only direct printable combinations are
-    // eligible: a dead-key state needs a composition sequence, not one key.
-    // Playback still requires U.S. QWERTY; this is not a current-layout resolver.
-    static let directCharacters: [String: Key] = {
-        var keys: [String: Key] = [:]
-        for (character, code) in base {
-            keys[String(character)] = (code, false, false)
-            if character.isLetter { keys[String(character).uppercased()] = (code, true, false) }
-        }
-        for (character, plain) in shifted {
-            if let code = base[plain] { keys[String(character)] = (code, true, false) }
-        }
-        for (character, key) in optionCharacters { keys[String(character)] = (key.code, key.shift, true) }
-        let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
-        guard let sources = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource],
-              let source = sources.first,
-              let property = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return keys }
-        let data = Unmanaged<CFData>.fromOpaque(property).takeUnretainedValue()
-        defer { withExtendedLifetime((data, source)) {} }
-        guard let bytes = CFDataGetBytePtr(data) else { return keys }
-        let layout = UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
-        for shift in [false, true] {
-            for code in base.values.sorted() {
-                var state: UInt32 = 0, length = 0
-                var output = [UniChar](repeating: 0, count: 8)
-                let flags = UInt32(optionKey | (shift ? shiftKey : 0)) >> 8
-                let result = UCKeyTranslate(layout, code, UInt16(kUCKeyActionDown), flags,
-                                            UInt32(LMGetKbdType()), 0, &state, output.count, &length, &output)
-                guard result == noErr, state == 0, length > 0 else { continue }
-                let text = String(utf16CodeUnits: output, count: length)
-                guard text.count == 1, !text.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { continue }
-                if keys[text] == nil { keys[text] = (code, shift, true) }
-            }
-        }
-        return keys
-    }()
-
-    static func lookup(_ string: String) -> (code: CGKeyCode, shift: Bool, option: Bool)? {
-        directCharacters[string]
     }
 }

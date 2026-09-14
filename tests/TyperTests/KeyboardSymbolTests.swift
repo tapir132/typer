@@ -3,7 +3,7 @@ import Testing
 @testable import Typer
 
 struct KeyboardSymbolTests {
-    @Test func directMappingsProduceTheirCharactersInApplesUSLayout() throws {
+    @MainActor @Test func directMappingsProduceTheirCharactersInApplesUSLayout() throws {
         let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
         let sources = try #require(TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource])
         let source = try #require(sources.first)
@@ -36,7 +36,7 @@ struct KeyboardSymbolTests {
 
     @Test func optionPunctuationPreservesModifierBarriersAndCancellationCleanup() {
         let events = Array("a—…B").map { PlannedEvent(kind: .character, value: String($0), flight: -50, dwell: 100) }
-        let strokes = KeyTimeline.strokes(for: events), actions = KeyTimeline.actions(for: strokes)
+        let strokes = KeyTimeline.strokes(for: events), actions = KeyTimeline.physicalActions(for: events)
         for index in 1..<strokes.count { #expect(strokes[index].pressOffset >= strokes[index - 1].releaseOffset) }
         for split in 0...actions.count {
             var held = Set<UInt16>(), emitted: [PhysicalKeyAction] = []
@@ -45,17 +45,17 @@ struct KeyboardSymbolTests {
                 if action.isDown { held.insert(action.code) } else { held.remove(action.code) }
                 return true
             }
-            for action in actions.prefix(split) { #expect(session.perform(action, events: events)) }
+            for action in actions.prefix(split) { #expect(session.perform(action)) }
             session.cancel()
             #expect(held.isEmpty)
             #expect(!emitted.contains { $0.code == 0 && $0.unicode == "—" })
         }
         var output: [PhysicalKeyAction] = []
         let session = PlaybackSession { output.append($0); return true }
-        for action in actions { #expect(session.perform(action, events: events)) }
+        for action in actions { #expect(session.perform(action)) }
         let dash = output.first { $0.eventIndex == 1 && $0.isDown }
         #expect(dash?.code == 27 && dash?.shift == true && dash?.option == true)
-        #expect(output.filter { $0.code == 58 && $0.isDown }.count == 2)
-        #expect(output.filter { $0.code == 58 && !$0.isDown }.count == 2)
+        #expect(output.filter { $0.code == 58 && $0.isDown }.count == 1)
+        #expect(output.filter { $0.code == 58 && !$0.isDown }.count == 1)
     }
 }

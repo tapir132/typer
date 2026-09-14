@@ -30,9 +30,9 @@ struct PlaybackControlsTests {
             PlannedEvent(kind: .character, value: "A", flight: 0, dwell: 120),
             PlannedEvent(kind: .character, value: "!", flight: -70, dwell: 130),
             PlannedEvent(kind: .wordBackspace, flight: 40, dwell: 80),
-            PlannedEvent(kind: .character, value: "é", flight: 30, dwell: 60)
+            PlannedEvent(kind: .character, value: "🙂", flight: 30, dwell: 60)
         ]
-        let actions = KeyTimeline.actions(for: KeyTimeline.strokes(for: events))
+        let actions = KeyTimeline.physicalActions(for: events)
         for split in 0...actions.count {
             var held: Set<UInt16> = [], output: [PhysicalKeyAction] = []
             let session = PlaybackSession {
@@ -40,15 +40,15 @@ struct PlaybackControlsTests {
                 if $0.isDown { held.insert($0.code) } else { held.remove($0.code) }
                 return true
             }
-            for action in actions.prefix(split) { #expect(session.perform(action, events: events)) }
+            for action in actions.prefix(split) { #expect(session.perform(action)) }
             session.pause()
             #expect(held.isEmpty)
             let count = output.count
-            for action in actions.dropFirst(split) { #expect(!session.perform(action, events: events)) }
+            for action in actions.dropFirst(split) { #expect(!session.perform(action)) }
             #expect(output.count == count)
             #expect(!session.skipWait())
             session.resume()
-            for action in actions.dropFirst(split) { #expect(session.perform(action, events: events)) }
+            for action in actions.dropFirst(split) { #expect(session.perform(action)) }
             #expect(held.isEmpty)
             #expect(output.filter { $0.isDown && $0.eventIndex != nil }.compactMap(\.eventIndex) == Array(events.indices))
         }
