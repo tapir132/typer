@@ -255,10 +255,7 @@ enum KeyboardMap {
         "\"": "'", "<": ",", ">": ".", "?": "/", "~": "`"
     ]
 
-    // Direct U.S. Option-layer punctuation. These characters have real single
-    // key combinations, so avoid the Unicode payload fallback (which Safari
-    // exposes with KeyA even when the inserted character is an em dash).
-    // Dead-key accents and emoji still require the Unicode fallback.
+    // Known mappings remain available if the installed layout cannot be read.
     private static let optionCharacters: [Character: (code: CGKeyCode, shift: Bool)] = [
         "–": (27, false), "—": (27, true),
         "“": (33, false), "”": (33, true),
@@ -268,12 +265,46 @@ enum KeyboardMap {
         "£": (20, false), "€": (19, true)
     ]
 
+    typealias Key = (code: CGKeyCode, shift: Bool, option: Bool)
+
+    // Read Apple's U.S. layout once. Only direct printable combinations are
+    // eligible: a dead-key state needs a composition sequence, not one key.
+    // Playback still requires U.S. QWERTY; this is not a current-layout resolver.
+    static let directCharacters: [String: Key] = {
+        var keys: [String: Key] = [:]
+        for (character, code) in base {
+            keys[String(character)] = (code, false, false)
+            if character.isLetter { keys[String(character).uppercased()] = (code, true, false) }
+        }
+        for (character, plain) in shifted {
+            if let code = base[plain] { keys[String(character)] = (code, true, false) }
+        }
+        for (character, key) in optionCharacters { keys[String(character)] = (key.code, key.shift, true) }
+        let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
+        guard let sources = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource],
+              let source = sources.first,
+              let property = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return keys }
+        let data = Unmanaged<CFData>.fromOpaque(property).takeUnretainedValue()
+        defer { withExtendedLifetime((data, source)) {} }
+        guard let bytes = CFDataGetBytePtr(data) else { return keys }
+        let layout = UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
+        for shift in [false, true] {
+            for code in base.values.sorted() {
+                var state: UInt32 = 0, length = 0
+                var output = [UniChar](repeating: 0, count: 8)
+                let flags = UInt32(optionKey | (shift ? shiftKey : 0)) >> 8
+                let result = UCKeyTranslate(layout, code, UInt16(kUCKeyActionDown), flags,
+                                            UInt32(LMGetKbdType()), 0, &state, output.count, &length, &output)
+                guard result == noErr, state == 0, length > 0 else { continue }
+                let text = String(utf16CodeUnits: output, count: length)
+                guard text.count == 1, !text.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else { continue }
+                if keys[text] == nil { keys[text] = (code, shift, true) }
+            }
+        }
+        return keys
+    }()
+
     static func lookup(_ string: String) -> (code: CGKeyCode, shift: Bool, option: Bool)? {
-        guard string.count == 1, let character = string.first else { return nil }
-        if let key = optionCharacters[character] { return (key.code, key.shift, true) }
-        guard string.lowercased().count == 1, let lower = string.lowercased().first else { return nil }
-        if let code = base[lower] { return (code, character.isUppercase, false) }
-        if let plain = shifted[character], let code = base[plain] { return (code, true, false) }
-        return nil
+        directCharacters[string]
     }
 }

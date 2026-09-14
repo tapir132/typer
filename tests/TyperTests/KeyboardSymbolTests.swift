@@ -3,7 +3,7 @@ import Testing
 @testable import Typer
 
 struct KeyboardSymbolTests {
-    @Test func optionSymbolMappingsProduceTheirCharactersInApplesUSLayout() throws {
+    @Test func directMappingsProduceTheirCharactersInApplesUSLayout() throws {
         let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
         let sources = try #require(TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource])
         let source = try #require(sources.first)
@@ -11,22 +11,27 @@ struct KeyboardSymbolTests {
         let data = Unmanaged<CFData>.fromOpaque(property).takeUnretainedValue()
         let bytes = try #require(CFDataGetBytePtr(data))
         let layout = UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
-        for character in "–—“”‘’…•°©®™£€" {
-            let key = try #require(KeyboardMap.lookup(String(character)))
-            #expect(key.option)
+        for (character, key) in KeyboardMap.directCharacters {
             var state: UInt32 = 0, length = 0
             var output = [UniChar](repeating: 0, count: 8)
-            let flags = UInt32(optionKey | (key.shift ? shiftKey : 0)) >> 8
+            let flags = UInt32((key.option ? optionKey : 0) | (key.shift ? shiftKey : 0)) >> 8
             let result = UCKeyTranslate(layout, key.code, UInt16(kUCKeyActionDown), flags,
                                         UInt32(LMGetKbdType()), 0, &state, output.count, &length, &output)
             #expect(result == noErr)
             #expect(state == 0) // A direct character, never an unfinished accent.
-            #expect(String(utf16CodeUnits: output, count: length) == String(character))
-            let descriptor = KeyDescriptor(event: PlannedEvent(kind: .character, value: String(character), flight: 0, dwell: 70))
-            #expect(descriptor.option && descriptor.unicode.isEmpty)
+            #expect(String(utf16CodeUnits: output, count: length) == character)
+            let descriptor = KeyDescriptor(event: PlannedEvent(kind: .character, value: character, flight: 0, dwell: 70))
+            #expect(descriptor.option == key.option && descriptor.shift == key.shift && descriptor.unicode.isEmpty)
+        }
+        for character in "–—“”‘’…•°©®™£€æÆøØßçÇœŒ∑πΩ√∞µ" {
+            #expect(KeyboardMap.lookup(String(character))?.option == true)
         }
         #expect(KeyboardMap.lookup("é") == nil)
+        #expect(KeyboardMap.lookup("e\u{301}") == nil)
         #expect(KeyboardMap.lookup("🙂") == nil)
+        #expect(KeyboardMap.lookup("\n") == nil)
+        #expect(KeyboardMap.lookup("\t") == nil)
+        #expect(KeyboardMap.lookup("ab") == nil)
     }
 
     @Test func optionPunctuationPreservesModifierBarriersAndCancellationCleanup() {

@@ -62,12 +62,13 @@ const server = http.createServer(async (req, res) => {
     if (req.headers.origin !== origin || req.headers['content-type'] !== 'application/json') return reply(res, 403, {error: 'Same-origin JSON request required.'});
     const data = await body(req);
     if (route === 'native/start') {
-      if (!validID(data.runID) || !validID(data.owner) || !fixtures.some(x => x.id === data.scenario)) throw new Error('Invalid fixture request.');
+      const fixture = fixtures.find(x => x.id === data.scenario);
+      if (!validID(data.runID) || !validID(data.owner) || !fixture?.variants.some(x => x.id === data.variant)) throw new Error('Invalid fixture request.');
       if (active && !nativeResult && Date.now() < active.expiresAt) throw new Error('The previous native check is still finishing. Try again in a moment.');
-      active = {runID: data.runID, owner: data.owner, active: true, heartbeat: Date.now(), expiresAt: Date.now() + 90_000, scenario: data.scenario};
+      active = {runID: data.runID, owner: data.owner, active: true, heartbeat: Date.now(), expiresAt: Date.now() + 90_000, scenario: data.scenario, variant: data.variant};
       nativeResult = null; lastCapture = null;
       await stateChanged();
-      const child = spawn('/usr/bin/open', ['-g', '-n', app, '--args', statePath, resultPath, data.scenario, data.runID, `${label} ${data.owner}`, args.includes('--global-hid') ? 'hid' : 'process'], {stdio: 'ignore'});
+      const child = spawn('/usr/bin/open', ['-g', '-n', app, '--args', statePath, resultPath, data.scenario, data.runID, `${label} ${data.owner}`, args.includes('--global-hid') ? 'hid' : 'process', data.variant], {stdio: 'ignore'});
       const failedLaunch = () => { if (active?.runID === data.runID) {
         active.active = false; nativeResult = {runID: data.runID, completed: false, error: 'The native checker could not be opened.'}; stateChanged().catch(() => {});
       } };

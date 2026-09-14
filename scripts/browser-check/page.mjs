@@ -16,6 +16,7 @@ function fixture() { return config.fixtures.find(x => x.id === $('scenario').val
 function pair() { return samples.get(fixture().id) || {}; }
 function render() {
   $('scenario').disabled = !!current;
+  $('variant').disabled = !!current || fixture().variants.length === 1;
   $('reference').disabled = !!current; $('native').disabled = !!current; $('stop').disabled = !current;
   const value = pair();
   $('reference-status').textContent = value.reference ? describe(value.reference) : 'Not recorded';
@@ -25,7 +26,8 @@ function render() {
 }
 function describe(capture) {
   const result = analyzeCapture(capture);
-  return result.usable ? `${capture.events.length} events · text matches` : result.reasons[0];
+  const label = capture.source === 'typer-native' ? `${capture.native?.variant?.title ?? 'Fixed delivery check'} · ` : '';
+  return result.usable ? `${label}${capture.events.length} events · text matches` : result.reasons[0];
 }
 function resetReport() {
   lastReport = null; $('report').replaceChildren();
@@ -33,7 +35,17 @@ function resetReport() {
 }
 function changePassage() {
   $('instructions').textContent = fixture().instructions;
-  $('passage').textContent = fixture().text; editor.value = ''; resetReport(); render();
+  $('passage').textContent = fixture().text; editor.value = '';
+  $('variant').replaceChildren(...fixture().variants.map(value => {
+    const option = document.createElement('option'); option.value = value.id; option.textContent = value.title; return option;
+  }));
+  changeVariant(); render();
+}
+function changeVariant() {
+  $('variant-help').textContent = $('variant').value === 'fixed'
+    ? 'Steady timing checks key delivery. It does not test the rhythm generator.'
+    : 'Uses Natural mode at 64 WPM with default variation and corrections. Your sample is not used for training.';
+  resetReport();
 }
 function start(source) {
   if (current) throw new Error('Finish the current recording first.');
@@ -79,7 +91,7 @@ async function runNative() {
   if (!/Version\/.+Safari\//.test(navigator.userAgent)) throw new Error('Open this local page in Safari to run the native check.');
   const runID = start('typer-native');
   try {
-    await request('native/start', {owner, runID, scenario: current.scenario});
+    await request('native/start', {owner, runID, scenario: current.scenario, variant: $('variant').value});
     if (current?.runID !== runID) { await request('stop', {owner, runID}); return; }
     heartbeatTimer = setInterval(() => {
       request('heartbeat', {owner, runID, focused: document.hasFocus() && document.activeElement === editor && !document.hidden})
@@ -135,15 +147,20 @@ $('stop').addEventListener('click', () => { if (current) finish(current.source !
 $('reference').addEventListener('click', () => { try { start('physical-keyboard-labelled'); } catch (error) { status(error.message, true); } });
 $('native').addEventListener('click', () => runNative().catch(error => status(error.message, true)));
 $('scenario').addEventListener('change', changePassage);
+$('variant').addEventListener('change', changeVariant);
 $('compare').addEventListener('click', () => {
   const {reference, playback} = pair(); lastReport = compareCaptures(reference, playback);
   const box = $('report'); box.replaceChildren();
   const title = document.createElement('strong');
-  title.textContent = !lastReport.comparable ? 'Comparison needs another sample' : lastReport.eventPropertiesMatch ? 'Recorded event properties match' : `${lastReport.differingEvents} event positions differ`;
+  title.textContent = !lastReport.comparable ? 'Comparison needs another sample' : lastReport.eventPropertiesMatch ? 'Complete event sequence matches' : 'Complete event sequences differ';
   box.append(title);
   const list = document.createElement('ul');
+  const rollover = value => value == null ? 'unavailable' : `${(value * 100).toFixed(0)}%`;
   const messages = lastReport.comparable ? [
     `Final text matches in both samples.`,
+    `${lastReport.keyProperties.matchingGroups} of ${lastReport.keyProperties.sharedGroups} shared key groups have matching properties. ${lastReport.keyProperties.referenceOnly.length + lastReport.keyProperties.playbackOnly.length} groups appear in only one sample.`,
+    `Overlapping keys: ${rollover(lastReport.reference.timing.rollover)} keyboard / ${rollover(lastReport.playback.timing.rollover)} Typer. Corrections and overlap can change event order.`,
+    `Typer run: ${playback.native?.variant?.title ?? 'Fixed delivery check'}.`,
     ...Object.entries(lastReport.timing).map(([key, value]) => value.sufficient ? `${key}: ${value.wassersteinMilliseconds.toFixed(1)} ms distribution distance (${value.reference.count}/${value.playback.count} observations).` : `${key}: more input needed for a timing comparison (${value.reference.count}/${value.playback.count}; at least 20 each).`),
     'This describes the captured passage, not a probability of human input.'
   ] : lastReport.reasons;
@@ -170,6 +187,7 @@ try {
   const query = new URLSearchParams(location.search);
   if (config.fixtures.some(f => f.id === query.get('scenario'))) $('scenario').value = query.get('scenario');
   changePassage(); status('Ready. Record a keyboard sample or run Typer.');
+  if (fixture().variants.some(x => x.id === query.get('variant'))) { $('variant').value = query.get('variant'); changeVariant(); }
   // The command-line verifier opens a dedicated regular Safari tab. This is
   // still a fixed native fixture, never a browser-generated keyboard reference.
   if (query.get('run') === 'native') setTimeout(() => runNative().catch(error => status(error.message, true)), 750);

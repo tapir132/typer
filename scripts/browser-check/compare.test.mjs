@@ -130,3 +130,53 @@ test('empirical Wasserstein uses unequal sample weights and exposes sample count
   assert.equal(result.timing.hold.reference.count, 23);
   assert.ok(Math.abs(result.timing.hold.wassersteinMilliseconds - 10) < 1e-10);
 });
+
+test('overlap changes sequence while preserving shared key properties', () => {
+  const reference = sample();
+  for (let i = 4; i < 8; i++) reference.events[i].time -= 80;
+  reference.events.sort((a, b) => a.time - b.time);
+  const result = compareCaptures(reference, sample('typer-native'));
+  assert.equal(result.eventPropertiesMatch, false);
+  assert.equal(result.keyProperties.sharedGroups, 6);
+  assert.equal(result.keyProperties.matchingGroups, 6);
+  assert.equal(result.inputProperties.matchingGroups, 6);
+  assert.equal(result.reference.timing.rollover, 0.5);
+});
+test('grouping still exposes incorrect codes, modifier states and locations', () => {
+  for (const [field, value] of [['code', 'KeyZ'], ['shiftKey', true], ['location', 1]]) {
+    const playback = sample('typer-native');
+    playback.events[0][field] = value; playback.events[3][field] = value;
+    const result = compareCaptures(sample(), playback);
+    assert.equal(result.comparable, true);
+    assert.equal(result.keyProperties.differingGroups, 2);
+    assert.equal(result.keyProperties.differences[0].playback[0][field], value);
+  }
+});
+test('additional occurrences remain visible even when property sets match', () => {
+  const playback = sample('typer-native');
+  playback.events.push(...sample('typer-native', 'a').events.map(event => ({...event, time: event.time + 400})));
+  const result = compareCaptures(sample(), playback);
+  assert.equal(result.eventPropertiesMatch, false);
+  assert.equal(result.keyProperties.differingGroups, 0);
+  assert.deepEqual(result.keyProperties.countDifferences.map(x => [x.reference, x.playback]), [[1, 2], [1, 2]]);
+});
+test('one-sided keys cannot disappear into a shared-key match', () => {
+  const playback = sample('typer-native');
+  playback.events.push(...sample('typer-native', 'z').events.map(event => ({...event, time: event.time + 400})));
+  const result = compareCaptures(sample(), playback);
+  assert.equal(result.eventPropertiesMatch, false);
+  assert.deepEqual(result.keyProperties.playbackOnly, [['keydown', 'z'], ['keyup', 'z']]);
+});
+test('missing beforeinput invalidates a delivery capture', () => {
+  const playback = sample('typer-native'); playback.events.splice(1, 1);
+  const result = compareCaptures(sample(), playback);
+  assert.equal(result.comparable, false);
+  assert.match(result.reasons.join(' '), /without a preceding beforeinput/);
+});
+test('generator variant metadata survives the report without training claims', () => {
+  const playback = sample('typer-native');
+  playback.native.variant = {id: 'natural1', generator: 'TypingEngine.generatePlan', seed: 1, physicalReferenceUsedForTraining: false};
+  const result = compareCaptures(sample(), playback);
+  assert.deepEqual(result.playbackVariant, playback.native.variant);
+  assert.equal(compareCaptures(sample('browser-automation'), playback).eventPropertiesMatch, null);
+});

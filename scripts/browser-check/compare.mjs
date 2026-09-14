@@ -87,6 +87,7 @@ export function analyzeCapture(input) {
   if (!counts.keydown || !counts.input) reasons.push('Keyboard and text-input evidence is required.');
   if (unmatchedUps || held.size || repeatedDowns) reasons.push('Key presses and releases are unbalanced.');
   if (untrusted) reasons.push('The trace contains script-dispatched events.');
+  if (inputOrderErrors) reasons.push('Text-input events arrived without a preceding beforeinput event.');
   if (sample.source === 'typer-native' && sample.native?.completed !== true) reasons.push('Native playback did not report successful completion.');
   return {
     usable: reasons.length === 0, reasons, textMatches: sample.text === sample.expectedText,
@@ -115,6 +116,37 @@ function structuralEvents(sample) {
   // Selection notifications can be coalesced by the browser event loop. Keep
   // them in raw exports, but do not impose key-for-key equality on them.
   return sample.events.filter(x => x.type !== 'selectionchange');
+}
+
+// Compare properties for a shared logical key separately from event order.
+// Keep code/location in the signature so wrong physical mappings remain visible.
+// Counts, one-sided groups and the strict positional diff are retained: grouping
+// must never turn missing keys or changed correction sequences into a full match.
+function groupedProperties(reference, playback, inputEvents = false) {
+  function groups(sample) {
+    const result = new Map();
+    for (const event of sample.events) {
+      if (!(inputEvents ? ['beforeinput', 'input'] : ['keydown', 'keyup']).includes(event.type)) continue;
+      const identity = JSON.stringify(inputEvents ? [event.type, event.inputType, event.data ?? null] : [event.type, event.key]);
+      const signature = JSON.stringify(Object.fromEntries(SIGNATURE_FIELDS.map(key => [key, event[key] ?? null])));
+      if (!result.has(identity)) result.set(identity, {count: 0, signatures: new Set()});
+      const group = result.get(identity); group.count++; group.signatures.add(signature);
+    }
+    return result;
+  }
+  const left = groups(reference), right = groups(playback);
+  const shared = [...left.keys()].filter(key => right.has(key)), differences = [], countDifferences = [];
+  let matchingGroups = 0;
+  for (const identity of shared) {
+    const a = left.get(identity), b = right.get(identity);
+    if (a.signatures.size === b.signatures.size && [...a.signatures].every(x => b.signatures.has(x))) matchingGroups++;
+    else if (differences.length < 30) differences.push({identity: JSON.parse(identity),
+      reference: [...a.signatures].map(x => JSON.parse(x)), playback: [...b.signatures].map(x => JSON.parse(x))});
+    if (a.count !== b.count) countDifferences.push({identity: JSON.parse(identity), reference: a.count, playback: b.count});
+  }
+  return {sharedGroups: shared.length, matchingGroups, differingGroups: shared.length - matchingGroups, differences, countDifferences,
+    referenceOnly: [...left.keys()].filter(key => !right.has(key)).map(x => JSON.parse(x)),
+    playbackOnly: [...right.keys()].filter(key => !left.has(key)).map(x => JSON.parse(x))};
 }
 
 export function compareCaptures(reference, playback) {
@@ -146,11 +178,14 @@ export function compareCaptures(reference, playback) {
     schemaVersion: SCHEMA, comparable: reasons.length === 0, reasons,
     eventPropertiesMatch: reasons.length === 0 ? differingEvents === 0 : null,
     differingEvents, differences, reference: a, playback: b, timing,
+    keyProperties: groupedProperties(reference, playback), inputProperties: groupedProperties(reference, playback, true),
+    playbackVariant: playback.native?.variant ?? null,
     limitations: [
       'Physical provenance is the user’s label; a webpage cannot authenticate keyboard hardware.',
       'Matching recorded properties does not establish indistinguishability to other observers or applications.',
       'Timing distances are descriptive, with no human probability or universal pass threshold; one passage is not a held-out human study.',
-      'Corrections and composition methods can legitimately change the sequence. Selection events are retained but excluded from exact sequence equality.'
+      'Corrections and composition methods can legitimately change the sequence. Selection events are retained but excluded from exact sequence equality.',
+      'Shared-key grouping ignores global order and compares property sets, not frequencies. Counts and one-sided groups remain visible; a shared-key match is not a whole-trace match.'
     ]
   };
 }

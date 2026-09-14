@@ -2,6 +2,14 @@ import AppKit
 import Foundation
 import Carbon
 
+enum BrowserVariant: String, CaseIterable {
+    case fixed, natural1, natural2, natural3
+    var seed: UInt64? {
+        switch self { case .fixed: return nil; case .natural1: return 1; case .natural2: return 2; case .natural3: return 3 }
+    }
+    var title: String { seed.map { "Natural rhythm · seed \($0)" } ?? "Fixed delivery check" }
+}
+
 enum BrowserFixture: String, CaseIterable {
     case plain, modifiers, overlap, corrections, lines, unicode, optionSymbols
 
@@ -43,15 +51,38 @@ enum BrowserFixture: String, CaseIterable {
             type("green"); expected = "cat green"
         case .lines: expected = "First line.\nSecond line."; type(expected)
         case .unicode: expected = "café — 🙂"; type(expected)
-        case .optionSymbols: expected = "–—“”‘’…•°©®™£€"; type(expected)
+        case .optionSymbols:
+            expected = KeyboardMap.directCharacters.filter { $0.value.option }.keys.sorted().joined(); type(expected)
         }
         let normalized = KeyTimeline.normalized(events)
         return (expected, TypingPlan(events: normalized.events, duration: normalized.duration, repairs: 0, effectiveWPM: 60))
     }
+    var variants: [BrowserVariant] { self == .plain ? BrowserVariant.allCases : [.fixed] }
+    func plan(variant: BrowserVariant) -> TypingPlan {
+        guard let seed = variant.seed else { return fixture.plan }
+        // Use production defaults and baseline. The physical comparison sample
+        // is held out: it never supplies these settings, seeds or training data.
+        let settings = TypingSettings()
+        var random = SeededGenerator(seed: seed)
+        return TypingEngine.generatePlan(text: fixture.text, settings: settings, profile: .baseline(), using: &random)
+    }
+    func metadata(variant: BrowserVariant) -> [String: Any] {
+        let plan = plan(variant: variant)
+        let settings = TypingSettings()
+        let settingsObject = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(settings))) ?? NSNull()
+        return ["id": variant.rawValue, "title": variant.title, "duration": plan.duration,
+                "generator": variant == .fixed ? "fixed-fixture" : "TypingEngine.generatePlan",
+                "seed": variant.seed.map { $0 as Any } ?? NSNull(),
+                "profile": variant == .fixed ? "none" : "research-baseline",
+                "wpm": variant == .fixed ? NSNull() : settings.wpm, "variation": variant == .fixed ? NSNull() : settings.variation,
+                "mistakeLevel": variant == .fixed ? NSNull() : settings.mistakeLevel,
+                "settings": variant == .fixed ? NSNull() : settingsObject, "repairs": plan.repairs,
+                "plannedEvents": plan.events.count, "physicalReferenceUsedForTraining": false]
+    }
     var json: [String: Any] {
         ["id": rawValue, "title": title, "instructions": instructions,
          "text": fixture.text, "duration": fixture.plan.duration,
-         "keyboardLayout": "com.apple.keylayout.US"]
+         "keyboardLayout": "com.apple.keylayout.US", "variants": variants.map { metadata(variant: $0) }]
     }
 }
 
@@ -60,13 +91,16 @@ enum BrowserFixture: String, CaseIterable {
 @MainActor
 final class BrowserPlaybackDelegate: NSObject, NSApplicationDelegate {
     let stateURL: URL, resultURL: URL, fixture: BrowserFixture, runID: String, label: String, processTargeted: Bool
-    init(state: URL, result: URL, fixture: BrowserFixture, runID: String, label: String, processTargeted: Bool) {
+    let variant: BrowserVariant
+    init(state: URL, result: URL, fixture: BrowserFixture, runID: String, label: String, processTargeted: Bool, variant: BrowserVariant) {
         self.stateURL = state; self.resultURL = result; self.fixture = fixture; self.runID = runID; self.label = label
         self.processTargeted = processTargeted
+        self.variant = variant
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let stateURL = stateURL, resultURL = resultURL, fixture = fixture, runID = runID, label = label, processTargeted = processTargeted
+        let variant = variant
         DispatchQueue.global(qos: .userInteractive).async {
             var failure: String?
             var sent = 0
@@ -144,9 +178,9 @@ final class BrowserPlaybackDelegate: NSObject, NSApplicationDelegate {
                                 "option": action.option, "offset": (ProcessInfo.processInfo.systemUptime - origin) * 1000])
                 return true
             }
-            let outcome: PlaybackSession.Outcome = ready ? session.run(plan: fixture.fixture.plan) : .failed
+            let outcome: PlaybackSession.Outcome = ready ? session.run(plan: fixture.plan(variant: variant)) : .failed
             let result: [String: Any] = ["runID": runID, "completed": outcome == .complete,
-                "error": failure ?? "", "sentActions": sent, "actions": actions,
+                "error": failure ?? "", "sentActions": sent, "actions": actions, "variant": fixture.metadata(variant: variant),
                 "route": processTargeted ? "CGEvent / postToPid" : "CGEvent / cghidEventTap", "system": ProcessInfo.processInfo.operatingSystemVersionString]
             if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) {
                 try? data.write(to: resultURL, options: .atomic)
@@ -164,10 +198,11 @@ struct BrowserPlaybackCheck {
             let data = try! JSONSerialization.data(withJSONObject: BrowserFixture.allCases.map(\.json), options: [.prettyPrinted, .sortedKeys])
             print(String(decoding: data, as: UTF8.self)); return
         }
-        guard (args.count == 6 || args.count == 7), let fixture = BrowserFixture(rawValue: args[3]) else { return }
+        guard args.count == 8, let fixture = BrowserFixture(rawValue: args[3]),
+              let variant = BrowserVariant(rawValue: args[7]), fixture.variants.contains(variant) else { return }
         let app = NSApplication.shared
         let delegate = BrowserPlaybackDelegate(state: URL(fileURLWithPath: args[1]), result: URL(fileURLWithPath: args[2]),
-                                               fixture: fixture, runID: args[4], label: args[5], processTargeted: args.last != "hid")
+                                               fixture: fixture, runID: args[4], label: args[5], processTargeted: args[6] != "hid", variant: variant)
         app.delegate = delegate
         app.setActivationPolicy(.accessory)
         app.run()

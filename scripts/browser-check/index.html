@@ -10,6 +10,8 @@
     <section aria-label="Test editor">
       <label for="scenario">Passage</label><select id="scenario" disabled><option>Loading passages…</option></select>
       <p id="instructions"></p><pre id="passage"></pre>
+      <label for="variant">Typer playback</label><select id="variant" disabled><option>Loading playback modes…</option></select>
+      <p id="variant-help" class="hint"></p>
       <div class="actions"><button id="reference" disabled>Record keyboard sample</button><button id="native" class="primary" disabled>Run Typer</button><button id="stop" disabled>Finish · Esc</button></div>
       <label for="editor">Test editor</label>
       <textarea id="editor" rows="7" spellcheck="false" autocorrect="off" autocapitalize="off" autocomplete="off" readonly placeholder="Start a recording above. Only this editor is recorded."></textarea>
@@ -24,7 +26,7 @@
       <button id="export" disabled>Export samples & report</button>
     </aside>
   </div>
-  <details><summary>What this check measures</summary><p>Final text, key presses and releases, modifiers, browser input events, and timing. A match applies to this passage and browser. It does not certify human input or hide macOS event-source information. “Trusted” means Safari dispatched an event; it does not prove a physical keypress.</p><p>Physical input is your label, not something this page can authenticate. Keyboard samples stay in this tab until you export. Typer uses fixed test passages; its automated reports are saved locally. This check currently targets the U.S. keyboard layout. Spellcheck and autocorrection are disabled here to isolate event delivery. Normal websites may behave differently, especially with Tab, input methods, and rich-text editors.</p></details>
+  <details><summary>What this check measures</summary><p>Final text, key presses and releases, modifiers, browser input events, and timing. Shared-key properties and complete event order are reported separately: corrections and overlapping presses can change the sequence without changing a key's properties. A match applies to this passage and browser. It does not certify human input or hide macOS event-source information. “Trusted” means Safari dispatched an event; it does not prove a physical keypress.</p><p>Fixed delivery checks use steady timing. Natural rhythm runs the production generator with three repeatable seeds and default settings. Your keyboard sample is kept separate from generation; it is never used to tune these runs. Compare every seed, rather than choosing the closest one. This does not evaluate a learned profile.</p><p>Physical input is your label, not something this page can authenticate. Keyboard samples stay in this tab until you export. Typer uses fixed test passages; its automated reports are saved locally. This check currently targets the U.S. keyboard layout. Spellcheck and autocorrection are disabled here to isolate event delivery. Normal websites may behave differently, especially with Tab, input methods, and rich-text editors.</p></details>
   <details><summary>Event details</summary><pre id="event-details">Run a check to see its event breakdown.</pre></details>
 </main>
 </body></html>
