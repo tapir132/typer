@@ -120,16 +120,18 @@ struct KeyboardLayoutTests {
     @Test func skippingLongWaitPreservesAccentAndModifierLeadTimes() {
         let events = [PlannedEvent(kind: .character, value: "É", flight: 5_000, dwell: 90)]
         let n = KeyTimeline.normalized(events)
-        var skips = 0, output: [(PhysicalKeyAction, Double)] = []
-        let session = PlaybackSession { output.append(($0, ProcessInfo.processInfo.systemUptime)); return true }
+        var skips = 0, output: [PhysicalKeyAction] = []
+        let session = PlaybackSession { output.append($0); return true }
         let outcome = session.run(plan: TypingPlan(events: n.events, duration: n.duration, repairs: 0, effectiveWPM: 0), onProgress: { progress in
             if progress.canSkipWait { skips += 1; #expect(session.skipWait()) }
         })
         #expect(outcome == .complete)
         #expect(skips == 1)
-        let prefix = output.first { $0.0.isDown && $0.0.isCompositionPrefix }!
-        let letter = output.first { $0.0.isDown && $0.0.eventIndex != nil }!
-        #expect(letter.1 - prefix.1 >= 0.14)
+        let prefix = output.first { $0.isDown && $0.isCompositionPrefix }!
+        let letter = output.first { $0.isDown && $0.eventIndex != nil }!
+        // A busy host can handle overdue deadlines close together. Verify the
+        // virtual schedule survives Skip; native checks measure arrival error.
+        #expect(letter.scheduledOffset! - prefix.scheduledOffset! >= 140)
     }
 
     @Test func runningAccentCanPauseReplayAndCommitOnlyOnce() {
