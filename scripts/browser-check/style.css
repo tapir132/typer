@@ -1,0 +1,38 @@
+:root { color-scheme: dark; --bg: #09090b; --surface: #131317; --raised: #1b1a22; --ink: #f1f1f8; --muted: #b5b4c8; --line: #34323e; --primary: #565df5; --signal: #abed3d; --danger: #f27568; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, BlinkMacSystemFont, sans-serif; }
+header { display: flex; align-items: center; gap: 20px; padding: 20px 32px; background: var(--surface); border-bottom: 1px solid var(--line); color: var(--muted); }
+header strong { color: var(--ink); font-size: 20px; }
+.local { margin-left: auto; color: var(--signal); font-size: 13px; }
+main { max-width: 1180px; margin: 0 auto; padding: 32px; }
+h1 { margin: 0 0 8px; font-size: 30px; line-height: 1.2; letter-spacing: -.025em; text-wrap: balance; }
+h2 { margin: 0 0 22px; font-size: 18px; }
+p { max-width: 72ch; text-wrap: pretty; }
+.intro { color: var(--muted); margin: 0 0 32px; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 32px; }
+aside { border-left: 1px solid var(--line); padding-left: 28px; }
+label { display: block; font-weight: 600; margin: 16px 0 8px; }
+label:first-child { margin-top: 0; }
+select, button, textarea { font: inherit; border-radius: 9px; border: 1px solid var(--line); color: var(--ink); background: var(--raised); }
+select { padding: 9px 12px; width: 100%; }
+button { padding: 10px 13px; font-size: 14px; font-weight: 600; cursor: pointer; }
+button:hover:not(:disabled) { background: #302e3d; }
+button:active:not(:disabled) { transform: translateY(1px); }
+button.primary { background: var(--primary); border-color: var(--primary); color: white; }
+button.primary:hover:not(:disabled) { background: #454acf; }
+button:disabled, select:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+#instructions, .hint { font-size: 13px; color: var(--muted); }
+#passage { margin: 20px 0; font-size: 19px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+textarea { display: block; width: 100%; min-height: 205px; resize: vertical; padding: 16px; background: var(--surface); font: 17px/1.65 ui-monospace, Menlo, monospace; }
+textarea::placeholder { color: var(--muted); }
+#status { color: var(--signal); min-height: 1.5em; }
+#status.error { color: var(--danger); }
+dl { margin: 0 0 22px; } dt { color: var(--muted); font-size: 13px; } dd { margin: 3px 0 20px; }
+#report { margin: 22px 0; font-size: 14px; }
+#report ul { padding-left: 20px; } #report li { margin: 8px 0; }
+details { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); }
+summary { cursor: pointer; color: var(--ink); } details p { font-size: 14px; }
+#event-details { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; font-size: 12px; }
+@media (max-width: 760px) { main { padding: 24px 20px; } header { padding: 16px 20px; gap: 12px; } .workspace { grid-template-columns: 1fr; gap: 24px; } aside { border-left: 0; border-top: 1px solid var(--line); padding: 24px 0 0; } h1 { font-size: 25px; } }

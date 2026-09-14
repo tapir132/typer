@@ -95,7 +95,7 @@ struct PlaybackCheckReport: Codable {
     var timingErrors: [PlaybackTimingError]
     var receipts: [PlaybackReceipt]
     var limitations = [
-        "This is a controlled AppKit receiver inside Typer. It uses the production scheduler and event creation, with process-targeted delivery rather than the global HID route.",
+        "This is a controlled AppKit receiver inside Typer. It uses the production scheduler, event creation and process-targeted delivery, addressed to Typer itself.",
         "Receipt times measure when Typer handles the event. Event timestamps describe event creation/occurrence and can conceal queue delays; both are retained.",
         "This does not measure physical keyboard latency or certify delivery in another application. Input layout, IME, autocorrect and editor shortcuts can change external results.",
         "Timing errors are descriptive milliseconds, with no universal pass threshold or probability of human typing. Repeat the check under representative system load.",

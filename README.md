@@ -80,6 +80,12 @@ The report provides median/MAD, KS and Wasserstein distances, rollover, autocorr
 
 **Profiles → Check playback on this Mac** runs built-in overlap, correction and Unicode scenarios in a dedicated AppKit editor. It uses the production scheduler and event creation, with delivery addressed only to Typer's process. Results check text, missing/duplicate events, event order and modifier flags, and report receipt-time errors separately from event timestamps. Results stay in memory unless exported. This checks the local receiver; it does not certify external apps or physical keyboard latency. See the [follow-up research and priorities](docs/research/2026-09-07-follow-up.md).
 
+For an external-browser check, run **`./scripts/verify-safari.sh`** from the repository. The local Safari page can record an explicit physical-keyboard sample, run fixed Typer passages through production event delivery to Safari's process, and compare/export the received events. It needs Node.js, the U.S. keyboard layout and Typer's existing signing identity/Accessibility grant. It does not require Safari Remote Automation or Apple-event JavaScript. [Instructions and interpretation](docs/VALIDATION.md#safari-input-comparison).
+
+On the U.S. layout, common Option-key symbols—including dashes, curly quotes and ellipses—now use their direct physical combinations. Accents requiring dead keys and emoji retain the Unicode fallback; their browser event sequences can differ from a physical input method.
+
+Playback addresses Core Graphics events to the app chosen when the countdown ends. This avoids the global HID route that swallowed Option-symbol key events in the Safari check. Switching apps still pauses playback; cleanup releases stay addressed to the original app. Other editors and keyboard configurations still need validation.
+
 ## Notes
 
 - Cross-application playback uses native Core Graphics keyboard events. There is no web view or browser runtime.

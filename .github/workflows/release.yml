@@ -32,10 +32,13 @@ jobs:
           fetch-depth: 0
       - name: Test
         run: swift test -Xswiftc -warnings-as-errors
+      - name: Test browser comparison
+        run: node --test scripts/browser-check/compare.test.mjs
       - name: Compile native verification tools
         run: |
           ./scripts/verify-playback.sh --compile-only
           ./scripts/verify-shortcuts.sh --compile-only
+          ./scripts/verify-safari.sh --compile-only
       - name: Validate candidate
         env:
           SMOKE_TESTED: ${{ inputs.smoke_tested }}

@@ -28,7 +28,7 @@ struct KeyDescriptor: Equatable {
         case .enter: code = 36
         case .tab: code = 48
         case .character:
-            if let key = KeyboardMap.lookup(event.value) { code = key.code; shift = key.shift }
+            if let key = KeyboardMap.lookup(event.value) { code = key.code; shift = key.shift; option = key.option }
             else { code = 0; unicode = event.value }
         }
     }

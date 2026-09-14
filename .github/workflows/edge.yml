@@ -20,10 +20,13 @@ jobs:
       - uses: actions/checkout@v5
       - name: Test
         run: swift test -Xswiftc -warnings-as-errors
+      - name: Test browser comparison
+        run: node --test scripts/browser-check/compare.test.mjs
       - name: Compile native verification tools
         run: |
           ./scripts/verify-playback.sh --compile-only
           ./scripts/verify-shortcuts.sh --compile-only
+          ./scripts/verify-safari.sh --compile-only
       - name: Configure edge version
         run: |
           build="$(git show -s --format=%ct HEAD)"

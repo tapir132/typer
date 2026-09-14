@@ -81,4 +81,31 @@ Carbon registration consumes key shortcuts in other apps and suppresses repeated
 
 `scripts/verify-shortcuts.sh` uses production shortcut sources, isolated preferences and a background AppKit receiver to check global registration/delivery, recorder rebinding, and preference reload. It posts only successfully registered fixture key chords. This automated smoke check does not substitute for pressing a physical modifier-only chord in each user's keyboard/environment. Both shortcut and playback verification scripts support `--compile-only`, which CI runs without signing, permissions, or UI automation.
 
+## Safari input comparison
+
+Run `./scripts/verify-safari.sh`. It builds a temporary signed helper and opens a loopback-only test page in regular Safari. Requirements: macOS graphical session, Node.js, U.S. input layout, Typer's signing identity and its existing Accessibility grant. The command does not change Safari settings, TCC, installed Typer or profiles. `--compile-only` compiles without a GUI/signature; `--no-open` starts the server without opening Safari. Stop the terminal command with Control-C when finished.
+
+1. Choose a passage. Click **Record keyboard sample**, type it with your physical keyboard, release held keys, and press Esc or **Finish**. This is a user-labelled reference; the browser cannot authenticate hardware provenance.
+2. Click **Run Typer** and leave the editor focused. The helper uses the production scheduler, event factory and process-addressed delivery. It checks foreground Safari, the current U.S. layout, and the uniquely labelled test editor before each key-down. A separate page instance cannot satisfy that editor identity. Focus loss, stale heartbeat or Stop aborts playback and releases posted keys. These extra focus checks add measurement overhead, especially before the first press; the receipt timings are not a hardware-latency benchmark.
+3. Click **Compare samples**. The report checks final text, key balance, event types/order, key/code/location, modifiers, input/composition data and `isTrusted`. Selection changes are retained but excluded from exact equality because browsers can coalesce them.
+4. **Export samples & report** downloads JSON. Physical samples otherwise stay in that tab's memory. Native fixture reports are saved under `output/browser-check/<run>/`. Only the dedicated editor records events; no global keyboard capture is installed. Recording stops on blur, hidden page, paste/drop, 90 seconds or 5,000 events.
+
+Hold, inter-press and signed-flight distributions include observation counts, median/MAD and empirical Wasserstein distance. Distances require at least 20 observations in each sample; this is descriptive minimum coverage, not a statistical certification. Inter-press gaps over 2.5 seconds are excluded from motor summaries. Different browser/layout/editor/scenario, incomplete capture, paste, wrong final text or missing releases prevents a comparison verdict. Key-value changes between down/up are shown separately; a changed modifier or Unicode fallback can legitimately cause these.
+
+The fixed passages cover plain text, capitals/symbols, overlap, backspace/Option-backspace, line breaks, Unicode and direct Option symbols. The page disables spellcheck/autocorrection. Tab is deliberately excluded: ordinary web textareas normally move focus on Tab, whereas the AppKit diagnostic inserts a tab. IMEs, rich-text editors, shortcuts, substitutions and other sites still need their own checks.
+
+The optional `--global-hid` launcher flag tests the previous route as an explicit diagnostic control; each native result names its route. Global HID posting passes through system event taps and shortcut handling. The observed failure does not by itself identify which component intercepted an event. Do not change another app's keyboard-remapping settings to make a report pass.
+
+`node scripts/browser-check/run-safari.mjs SESSION_URL OWNED_SAFARI_WINDOW_ID OUTPUT_FOLDER` runs every fixed fixture in one already-owned test window. It navigates only while that window still contains the session URL. It uses ordinary Safari navigation, not WebDriver or Apple-event JavaScript. This runner temporarily needs Safari focus; it never creates a physical reference. The fixed native runs can also be triggered individually from the page.
+
+To compare a downloaded reference with a saved native fixture:
+
+```sh
+node scripts/browser-check/compare-report.mjs keyboard-export.json native-capture.json comparison.json
+```
+
+Run `node --test scripts/browser-check/compare.test.mjs` for deterministic analyzer coverage. Constructed fixtures and Playwright input are always test data; an automated reference cannot produce a physical-comparison verdict. CI runs these tests and compiles the native Safari helper.
+
+`isTrusted` means browser dispatch, not a physical keyboard certificate ([DOM](https://dom.spec.whatwg.org/#dom-event-istrusted), [WebDriver](https://www.w3.org/TR/webdriver/#actions)). Native apps can inspect event-source fields unavailable through the standard DOM keyboard interface ([Apple](https://developer.apple.com/documentation/coregraphics/cgeventfield/eventsourceunixprocessid)). A property match in this report establishes neither universal indistinguishability nor a probability of human typing.
+
 The in-app text preview shares the plan and scheduler, but applies edits to an abstract in-memory editor. It neither posts OS keys nor persists source text. Its text equality check, scheduler tests and native receiver checks establish separate properties and do not certify every external editor. Changing timing, pause or preset controls regenerates the preview; skip only changes the current run.

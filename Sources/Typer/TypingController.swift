@@ -182,7 +182,10 @@ final class TypingController: ObservableObject {
         let source = CGEventSource(stateID: .privateState)
         let session = PlaybackSession { action in
             guard let event = KeyboardEventPoster.make(action, source: source) else { return false }
-            event.post(tap: .cghidEventTap)
+            // Bind this run, including cleanup releases, to its chosen app.
+            // The global HID route can have modifier combinations intercepted
+            // before they reach the target (observed in Safari symbol checks).
+            KeyboardEventPoster.post(event, to: target.processIdentifier)
             return true
         }
         playbackSession = session
@@ -217,6 +220,10 @@ final class TypingController: ObservableObject {
 /// The diagnostic receiver and cross-app playback share the same event creation.
 /// Only the destination differs: the diagnostic posts to Typer's process alone.
 enum KeyboardEventPoster {
+    static func post(_ event: CGEvent, to processID: pid_t) {
+        event.postToPid(processID)
+    }
+
     static func make(_ action: PhysicalKeyAction, source: CGEventSource?, marker: Int64 = 0) -> CGEvent? {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: action.code, keyDown: action.isDown) else { return nil }
         event.flags = []
@@ -248,11 +255,25 @@ enum KeyboardMap {
         "\"": "'", "<": ",", ">": ".", "?": "/", "~": "`"
     ]
 
-    static func lookup(_ string: String) -> (code: CGKeyCode, shift: Bool)? {
+    // Direct U.S. Option-layer punctuation. These characters have real single
+    // key combinations, so avoid the Unicode payload fallback (which Safari
+    // exposes with KeyA even when the inserted character is an em dash).
+    // Dead-key accents and emoji still require the Unicode fallback.
+    private static let optionCharacters: [Character: (code: CGKeyCode, shift: Bool)] = [
+        "–": (27, false), "—": (27, true),
+        "“": (33, false), "”": (33, true),
+        "‘": (30, false), "’": (30, true),
+        "…": (41, false), "•": (28, false), "°": (28, true),
+        "©": (5, false), "®": (15, false), "™": (19, false),
+        "£": (20, false), "€": (19, true)
+    ]
+
+    static func lookup(_ string: String) -> (code: CGKeyCode, shift: Bool, option: Bool)? {
         guard string.count == 1, let character = string.first else { return nil }
+        if let key = optionCharacters[character] { return (key.code, key.shift, true) }
         guard string.lowercased().count == 1, let lower = string.lowercased().first else { return nil }
-        if let code = base[lower] { return (code, character.isUppercase) }
-        if let plain = shifted[character], let code = base[plain] { return (code, true) }
+        if let code = base[lower] { return (code, character.isUppercase, false) }
+        if let plain = shifted[character], let code = base[plain] { return (code, true, false) }
         return nil
     }
 }
