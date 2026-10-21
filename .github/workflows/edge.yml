@@ -19,7 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Test
-        run: swift test -Xswiftc -warnings-as-errors
+        # Native UI tests share NSApplication; isolate their clocks and focus state.
+        run: swift test --no-parallel -Xswiftc -warnings-as-errors
       - name: Test browser comparison
         run: node --test scripts/browser-check/compare.test.mjs
       - name: Compile native verification tools
