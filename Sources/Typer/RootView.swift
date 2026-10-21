@@ -191,7 +191,9 @@ struct RootView: View {
                 if controller.state == .paused {
                     Button("Resume in target app") {
                         controller.focusTarget()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { controller.togglePause() }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            if controller.state == .paused { controller.togglePause() }
+                        }
                     }.buttonStyle(SecondaryButtonStyle())
                     Text("Focus the same field, then press \(shortcuts.bindings.pause.displayText).").font(.caption).foregroundStyle(TyperTheme.mutedStrong)
                 } else {
