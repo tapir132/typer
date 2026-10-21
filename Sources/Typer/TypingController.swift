@@ -265,11 +265,13 @@ final class TypingController: ObservableObject {
         playbackQueue.async { [weak self] in
             let outcome = session.run(plan: plan, onProgress: { progress in
                 DispatchQueue.main.async { [weak self] in
-                    guard let self, self.playbackSession === session else { return }
+                    guard let self, self.playbackSession === session, self.state.isPlaybackActive else { return }
                     var progress = progress
                     progress.isPaused = self.state != .typing
-                    self.progress = progress
-                    self.refreshOverlay()
+                    if self.progress != progress {
+                        self.progress = progress
+                        self.refreshOverlay()
+                    }
                 }
             })
             DispatchQueue.main.async { [weak self] in

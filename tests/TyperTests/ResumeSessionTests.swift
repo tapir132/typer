@@ -40,7 +40,7 @@ struct ResumeSessionTests {
         controller.stop()
         #expect(controller.state == .stopped && controller.canResume)
         try await Task.sleep(for: .milliseconds(120))
-        #expect(abs(controller.progress.remaining - remaining) < 0.2)
+        #expect(controller.progress.remaining == remaining, "Queued progress must not change the stopped timer")
         #expect(!takePlaybackSignal(last))
         // Resume this same retained scheduler with a mock transport. Production
         // performs app/field focus checks before this point.
