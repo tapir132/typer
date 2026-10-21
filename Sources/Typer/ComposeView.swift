@@ -123,21 +123,29 @@ struct ComposeView: View {
             Button(action: model.arm) {
                 HStack {
                     Image(systemName: "play.fill").font(.system(size: 11))
-                    Text("Arm typing")
+                    Text(controller.canResume ? "Resume typing" : "Arm typing")
                     Spacer()
                     Text(shortcuts.bindings.arm.displayText).font(.system(size: 9, weight: .medium, design: .monospaced)).opacity(0.78)
                 }
                 .padding(.horizontal, 14)
             }
             .buttonStyle(PrimaryButtonStyle())
-            .disabled(model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || controller.state.isBusy)
+            .disabled((!controller.canResume && model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || controller.state.isBusy)
+
+            if controller.state == .stopped && controller.canResume {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(controller.pauseMessage ?? "Your place is saved for this session. Resume gives you 5 seconds to return to the original field.")
+                        .controlNote().fixedSize(horizontal: false, vertical: true)
+                    Button("Start over from the beginning", action: model.startOver).buttonStyle(QuietButtonStyle())
+                }.padding(.top, 10)
+            }
 
             Text("Pause/resume: \(shortcuts.bindings.pause.displayText)  ·  Stop: \(shortcuts.stopDescription)")
                 .font(.system(size: 8.5, weight: .medium, design: .monospaced)).foregroundStyle(TyperTheme.muted).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity).padding(.top, 9)
 
             controlGroup {
-                compactToggle("Fullscreen typing overlay", note: "Red tint with large pause shortcuts", help: "Shows a red tint and large shortcut reminders while typing. Clicks pass through. Turn off to keep your screen clear; shortcuts still work.", binding: $model.settings.showTypingOverlay)
+                compactToggle("Fullscreen typing overlay", note: "Pause, resume, or stop on screen", help: "Shows a red tint with clickable Pause / Resume, Stop, and Skip controls. The controls keep keyboard focus in the target app. Clicks outside the panel pass through; shortcuts work with the overlay off.", binding: $model.settings.showTypingOverlay)
             }
 
             controlGroup { PresetControls(model: model) }
@@ -218,6 +226,11 @@ struct ComposeView: View {
                     }
                     .font(.system(size: 10)).controlSize(.mini)
                     .padding(.top, 2).padding(.bottom, 7)
+                }
+                compactToggle("Paragraph pauses", note: "\(model.settings.paragraphPauseMinutes.lowerBound)–\(model.settings.paragraphPauseMinutes.upperBound) minutes · between paragraphs", help: QuickHelp.paragraphPauses, binding: $model.settings.paragraphPauses)
+                if model.settings.paragraphPauses {
+                    ParagraphPauseRangeSlider(minimum: $model.settings.paragraphPauseMinimum, maximum: $model.settings.paragraphPauseMaximum)
+                        .padding(.bottom, 8)
                 }
                 compactToggle("Fatigue drift", note: "Cadence evolves over long runs", help: "Gradually changes the pace during a run.", binding: $model.settings.fatigueDrift)
             }

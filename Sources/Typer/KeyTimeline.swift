@@ -53,7 +53,10 @@ enum KeyTimeline {
         for (index, event) in events.enumerated() {
             let key = KeyDescriptor(event: event, layout: layout)
             let dwell = event.dwell.isFinite ? min(500, max(10, event.dwell)) : 76
-            let flight = event.flight.isFinite ? min(60_000, max(-500, event.flight)) : 100
+            // User-configured paragraph breaks can last up to thirty minutes;
+            // keep ordinary motor/thought timing on its existing support.
+            let flightLimit = event.pauseKind == .paragraph ? 1_800_000.0 : 60_000.0
+            let flight = event.flight.isFinite ? min(flightLimit, max(-500, event.flight)) : 100
             var press = index == 0 ? max(0, flight) : max(lastPress + 1, lastPress + lastDwell + flight)
             let barrier = event.kind != .character || !key.unicode.isEmpty ||
                 (index > 0 && events[index - 1].kind != .character) || !key.prefix.isEmpty ||

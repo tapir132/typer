@@ -293,9 +293,20 @@ enum TypingEngine {
 
         let tokens = tokenize(text, sentencePauses: settings.sentencePauses || !learnedContexts.isEmpty)
         var sentencePauseEvents: [Int] = []
+        var paragraphPauseEvents: [Int] = []
+        func isParagraphBreak(_ token: String) -> Bool {
+            token.allSatisfy(\.isWhitespace) && token.rangeOfCharacter(from: .newlines) != nil
+        }
         var tokenIndex = 0
         while tokenIndex < tokens.count {
-            if tokenIndex > 0 && tokens[tokenIndex - 1].endsSentence {
+            if settings.paragraphPauses, tokenIndex >= 2, isParagraphBreak(tokens[tokenIndex - 1].text) {
+                // The whole separator is already typed. Wait once before the
+                // next paragraph, including for a single Return or blank lines.
+                paragraphPauseEvents.append(events.count)
+                if tokens[tokenIndex - 2].endsSentence { sentencePauseEvents.append(events.count) }
+                pauseCandidates[events.count] = .sentence
+            } else if tokenIndex > 0 && tokens[tokenIndex - 1].endsSentence &&
+                        !(settings.paragraphPauses && isParagraphBreak(tokens[tokenIndex].text)) {
                 sentencePauseEvents.append(events.count)
                 pauseCandidates[events.count] = .sentence
             } else if tokenIndex > 0 && tokens[tokenIndex - 1].text.allSatisfy(\.isWhitespace),
@@ -438,6 +449,14 @@ enum TypingEngine {
             if seconds * 1_000 >= events[index].flight {
                 events[index].flight = seconds * 1_000
                 events[index].pauseKind = .sentence
+            }
+        }
+        let paragraphRange = settings.paragraphPauseMinutes
+        for index in paragraphPauseEvents where events.indices.contains(index) {
+            let minutes = Double(paragraphRange.lowerBound) + unit() * Double(paragraphRange.upperBound - paragraphRange.lowerBound)
+            if minutes * 60_000 >= events[index].flight {
+                events[index].flight = minutes * 60_000
+                events[index].pauseKind = .paragraph
             }
         }
         let timeline = KeyTimeline.normalized(events)

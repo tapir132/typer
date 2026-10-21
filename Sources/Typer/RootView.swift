@@ -64,7 +64,7 @@ struct RootView: View {
         .sheet(isPresented: $model.showsSettings) { SettingsView(model: model) }
         .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in
             model.showsSettings = false
-            model.controller.stop()
+            model.controller.discardSession()
         }
         .onAppear { updates.start() }
         .onChange(of: controller.state) { _, state in
@@ -73,7 +73,7 @@ struct RootView: View {
                 model.showToast("Typing complete.")
                 Task { try? await Task.sleep(for: .seconds(1.8)); controller.reset() }
             case .stopped:
-                model.showToast("Typing stopped.")
+                model.showToast(controller.canResume ? "Stopped. Your place is saved until you quit or start over." : "Typing stopped.")
                 Task { try? await Task.sleep(for: .seconds(1.4)); controller.reset() }
             case .error(let message): model.showToast(message)
             default: break
@@ -189,7 +189,10 @@ struct RootView: View {
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(TyperTheme.mutedStrong)
                 if controller.state == .paused {
-                    Button("Return to target app") { controller.focusTarget() }.buttonStyle(SecondaryButtonStyle())
+                    Button("Resume in target app") {
+                        controller.focusTarget()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { controller.togglePause() }
+                    }.buttonStyle(SecondaryButtonStyle())
                     Text("Focus the same field, then press \(shortcuts.bindings.pause.displayText).").font(.caption).foregroundStyle(TyperTheme.mutedStrong)
                 } else {
                     Button("Pause typing") { controller.pause() }.buttonStyle(SecondaryButtonStyle())

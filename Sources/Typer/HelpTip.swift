@@ -34,6 +34,7 @@ struct HelpTip: View {
 
 enum QuickHelp {
     static let sentencePauses = "Waits after each sentence when more text follows. Choose a random range, or equal Min and Max for a fixed wait. Works in Clean too; overlapping pauses use the longer wait."
+    static let paragraphPauses = "Waits between paragraphs, after one or more line breaks, when more text follows. Drag both handles to choose 1–30 minutes. Set both to 5 for a fixed five-minute wait. The longer boundary pause wins. Skip ends the current wait; Pause freezes it. Turn off to skip paragraph waits entirely."
     static let legacyProfile = "Still usable for playback. Training and validation are locked; new samples build My rhythm separately. You can keep this profile."
     static let speed = "Target pace in five-character words per minute. Pauses and repairs make the finished run slower."
     static let measuredSpeed = "Recorded pace in five-character words per minute, including pauses and editing. Idle gaps lower this number."

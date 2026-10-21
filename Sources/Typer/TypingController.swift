@@ -12,6 +12,7 @@ final class TypingController: ObservableObject {
     @Published var overlayEnabled = true { didSet { refreshOverlay() } }
     private let screenOverlay = TypingScreenOverlay()
     private var target: NSRunningApplication?
+    private var targetField: AXUIElement?
     private var focusObserver: NSObjectProtocol?
 
     private var countdownTask: Task<Void, Never>?
@@ -35,6 +36,9 @@ final class TypingController: ObservableObject {
             }
         }
         shortcuts.onBindingsChanged = { [weak self] in self?.refreshOverlay() }
+        screenOverlay.onPauseResume = { [weak self] in self?.togglePause() }
+        screenOverlay.onSkipWait = { [weak self] in self?.skipWait() }
+        screenOverlay.onStop = { [weak self] in self?.stop() }
         shortcuts.start()
         focusObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main) { [weak self] _ in
@@ -71,7 +75,7 @@ final class TypingController: ObservableObject {
             state = .error("Enable Typer in System Settings → Privacy & Security → Accessibility.")
             return
         }
-        stop(resetState: false)
+        discardSession(resetState: false)
         state = .preparing
         planningTask = Task { [weak self] in
             let plan = await Task.detached(priority: .userInitiated) {
@@ -90,7 +94,7 @@ final class TypingController: ObservableObject {
             state = .error("Enable Typer in System Settings → Privacy & Security → Accessibility.")
             return
         }
-        stop(resetState: false)
+        discardSession(resetState: false)
         startCountdown(with: plan)
     }
 
@@ -116,6 +120,24 @@ final class TypingController: ObservableObject {
     }
 
     func stop(resetState: Bool = true) {
+        // Retain the exact scheduler position, including any unfinished repair.
+        // Pausing releases held keys and cancels an unfinished accent safely.
+        if resetState, playbackSession != nil, state.isPlaybackActive || isResuming {
+            countdownTask?.cancel(); countdownTask = nil
+            playbackSession?.pause()
+            shortcuts.finishPlayback()
+            screenOverlay.hide()
+            pauseMessage = nil
+            progress.isPaused = true
+            state = .stopped
+            return
+        }
+        // Repeated Stop must not accidentally erase the saved position.
+        if resetState, state == .stopped, canResume { return }
+        discardSession(resetState: resetState)
+    }
+
+    func discardSession(resetState: Bool = true) {
         planningTask?.cancel()
         planningTask = nil
         countdownTask?.cancel()
@@ -125,19 +147,52 @@ final class TypingController: ObservableObject {
         shortcuts.finishPlayback()
         screenOverlay.hide()
         target = nil
+        targetField = nil
         pauseMessage = nil
         progress = PlaybackProgress()
         if resetState { state = .stopped }
     }
 
-    func reset() { if !state.isBusy { state = .ready } }
+    var canResume: Bool { playbackSession != nil && (state == .paused || state == .stopped) }
+    private var isResuming: Bool { if case .armed = state { return playbackSession != nil }; return false }
+
+    func reset() { if !state.isBusy && !canResume { state = .ready } }
+
+    /// A stopped run uses the ordinary countdown so the user can restore the
+    /// original field before anything is sent. Nothing is regenerated.
+    func resumeStopped() {
+        guard state == .stopped, canResume else { return }
+        guard let target, !target.isTerminated else {
+            pauseMessage = "The target app closed. Start a new run in a new field."
+            return
+        }
+        if let error = shortcuts.preparePlayback() { pauseMessage = error; return }
+        state = .armed(5)
+        countdownTask = Task { [weak self] in
+            for count in stride(from: 4, through: 0, by: -1) {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled, let self else { return }
+                if count > 0 { self.state = .armed(count) }
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.countdownTask = nil
+            self.state = .paused
+            self.togglePause()
+        }
+    }
 
     func togglePause() {
         if state == .typing { pause() }
+        else if state == .stopped { resumeStopped() }
         else if state == .paused {
             guard let target, !target.isTerminated,
                   NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier else {
                 pauseMessage = "Focus the same field in \(target?.localizedName ?? "the target app") before resuming."
+                refreshOverlay()
+                return
+            }
+            if let targetField, !KeyboardEventPoster.canCleanUpComposition(in: target.processIdentifier, field: targetField) {
+                pauseMessage = "Click the original text field in \(target.localizedName ?? "the target app"), then resume."
                 refreshOverlay()
                 return
             }
@@ -183,9 +238,6 @@ final class TypingController: ObservableObject {
         }
         let layoutGuard = PlaybackLayoutGuard(identifier: layout.identifier)
         let originalField = KeyboardEventPoster.focusedElement(in: target.processIdentifier)
-        self.target = target
-        state = .typing
-        progress = PlaybackProgress(remaining: plan.duration / 1_000)
         let source = CGEventSource(stateID: .privateState)
         let session = PlaybackSession(layout: layout) { action in
             if action.isDown && !layoutGuard.isCurrent { return false }
@@ -197,6 +249,17 @@ final class TypingController: ObservableObject {
             KeyboardEventPoster.post(event, to: target.processIdentifier)
             return true
         }
+        run(plan: plan, session: session, target: target, field: originalField)
+    }
+
+    /// Starts an already prepared transport. Kept separate from event creation
+    /// so lifecycle checks can run without sending keys to another application.
+    func run(plan: TypingPlan, session: PlaybackSession, target: NSRunningApplication, field: AXUIElement?) {
+        self.target = target
+        self.targetField = field
+        lastPlan = plan
+        state = .typing
+        progress = PlaybackProgress(remaining: plan.duration / 1_000)
         playbackSession = session
         refreshOverlay()
         playbackQueue.async { [weak self] in
@@ -204,7 +267,7 @@ final class TypingController: ObservableObject {
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.playbackSession === session else { return }
                     var progress = progress
-                    progress.isPaused = self.state == .paused
+                    progress.isPaused = self.state != .typing
                     self.progress = progress
                     self.refreshOverlay()
                 }
@@ -215,6 +278,7 @@ final class TypingController: ObservableObject {
                 self.shortcuts.finishPlayback()
                 self.screenOverlay.hide()
                 self.target = nil
+                self.targetField = nil
                 switch outcome {
                 case .complete: self.state = .complete
                 case .cancelled: self.state = .stopped

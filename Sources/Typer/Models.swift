@@ -88,6 +88,9 @@ struct TypingSettings: Codable, Equatable {
     var sentencePauses = false
     var sentencePauseMinimum = 2
     var sentencePauseMaximum = 10
+    var paragraphPauses = false
+    var paragraphPauseMinimum = 5
+    var paragraphPauseMaximum = 10
     var learnedPauses = true
     var showTypingOverlay = true
     var fatigueDrift = true
@@ -98,11 +101,18 @@ struct TypingSettings: Codable, Equatable {
         return min(first, second)...max(first, second)
     }
 
+    var paragraphPauseMinutes: ClosedRange<Int> {
+        let first = min(30, max(1, paragraphPauseMinimum))
+        let second = min(30, max(1, paragraphPauseMaximum))
+        return min(first, second)...max(first, second)
+    }
+
     init() {}
 
     private enum CodingKeys: String, CodingKey {
         case mode, wpm, variation, mistakeLevel, delayedRepairs, thoughtPauses, extendedThoughtPauses
         case sentencePauses, sentencePauseMinimum, sentencePauseMaximum, fatigueDrift, learnedPauses, showTypingOverlay
+        case paragraphPauses, paragraphPauseMinimum, paragraphPauseMaximum
     }
 
     init(from decoder: Decoder) throws {
@@ -117,6 +127,9 @@ struct TypingSettings: Codable, Equatable {
         sentencePauses = try values.decodeIfPresent(Bool.self, forKey: .sentencePauses) ?? false
         sentencePauseMinimum = try values.decodeIfPresent(Int.self, forKey: .sentencePauseMinimum) ?? 2
         sentencePauseMaximum = try values.decodeIfPresent(Int.self, forKey: .sentencePauseMaximum) ?? 10
+        paragraphPauses = try values.decodeIfPresent(Bool.self, forKey: .paragraphPauses) ?? false
+        paragraphPauseMinimum = try values.decodeIfPresent(Int.self, forKey: .paragraphPauseMinimum) ?? 5
+        paragraphPauseMaximum = try values.decodeIfPresent(Int.self, forKey: .paragraphPauseMaximum) ?? 10
         learnedPauses = try values.decodeIfPresent(Bool.self, forKey: .learnedPauses) ?? true
         showTypingOverlay = try values.decodeIfPresent(Bool.self, forKey: .showTypingOverlay) ?? true
         fatigueDrift = try values.decodeIfPresent(Bool.self, forKey: .fatigueDrift) ?? true
@@ -199,6 +212,7 @@ struct PlannedEvent: Codable, Equatable {
 }
 
 enum PlannedPauseKind: String, Codable {
+    case paragraph = "Paragraph pause"
     case sentence = "Sentence pause"
     case thought = "Thought pause"
     case extendedThought = "Extended thought pause"
@@ -216,7 +230,11 @@ struct PlaybackProgress: Equatable {
     var canSkipWait: Bool { !isPaused && pauseKind != nil && waitRemaining > 0 }
     var activity: String {
         if isPaused { return "Paused" }
-        if let pauseKind, waitRemaining > 0 { return "\(pauseKind.rawValue) · \(String(format: "%.1f", waitRemaining)) s" }
+        if let pauseKind, waitRemaining > 0 {
+            let seconds = Int(ceil(waitRemaining))
+            let time = seconds >= 60 ? "\(seconds / 60):\(String(format: "%02d", seconds % 60)) remaining" : "\(String(format: "%.1f", waitRemaining)) s"
+            return "\(pauseKind.rawValue) · \(time)"
+        }
         return "Typing"
     }
 }

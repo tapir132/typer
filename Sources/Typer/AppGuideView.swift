@@ -75,17 +75,18 @@ struct AppGuideView: View {
             section("2. Try the preview", "Play preview shows the planned typing inside Typer. It never sends keys to another app.")
             section("3. Allow typing", "In Settings → General, enable Accessibility. Input Monitoring is only for Live capture.")
             section("4. Arm and click your editor", "Click Arm typing. You have five seconds to switch apps and click where the text should begin.")
-            section("5. Keep that field focused", "Let Typer finish, then check the text. The red overlay shows pause and stop shortcuts; mouse clicks pass through it.")
-            section("Pause or stop", "\(shortcuts.bindings.pause.displayText) pauses and resumes. Return to the same field before resuming. \(shortcuts.stopDescription) stops; text already typed stays in place.")
+            section("5. Keep that field focused", "Let Typer finish, then check the text. The red overlay has Pause / Resume, Stop, and Skip buttons. Clicks outside its control panel pass through.")
+            section("Pause or stop", "Click Pause or press \(shortcuts.bindings.pause.displayText). Resume continues the same run. Stop hides the overlay and keeps your place; Resume typing in Compose gives you 5 seconds to return to the original field. Keep its text and cursor unchanged. Quitting or Start over discards that saved position.")
         case .controls:
             section("Change shortcuts", "Settings → Shortcuts lets you rebind Arm, Pause / resume, Skip, and Stop. Click a binding, press and release the new keys. Esc cancels. Control–Esc remains a backup Stop when available.")
             section("Choose a rhythm", "Natural uses the built-in model. Clean skips generated mistakes. My rhythm uses your active profile, with built-in timing where training is limited.")
             section("Adjust the feel", "Speed sets the target WPM. Lower Timing variation gives steadier pacing; higher adds more bursts and brief hesitations. Mistake frequency controls errors and repairs. Long pauses have their own controls.")
-            section("Three kinds of pauses", "Thought pauses: occasional 2–5 second waits. Extended thought pauses: rare 2–45 second waits, when Thought pauses is on. Sentence pauses: a wait after each sentence with more text to follow, starting at 2–10 seconds.")
+            section("Choose your pauses", "Thought pauses add occasional short waits. Sentence pauses wait after each sentence. Paragraph pauses wait between paragraphs for a random number of minutes in your chosen range. Each can be turned off.")
             section("Learn your pause habits", "In My rhythm, Learned pause habits uses your recorded pause frequency and length when enough evidence is available. Check Profiles → Training coverage.")
             section("Save a setup", "Use Preset → Save… to keep your settings. Controls are also remembered when you quit. Source text is never saved.")
             details("More controls") {
                 section("Sentence pause range", "Set Min and Max from 1–60 seconds; equal values give a fixed wait. These pauses work in Clean too. At the same point, the longer pause wins. Unusual abbreviations can confuse sentence detection.")
+                section("Paragraph pause range", "Turn on Paragraph pauses, then drag the Min and Max handles from 1–30 minutes. Equal values give a fixed wait, such as 5–5 minutes. A paragraph ends at a line break; blank lines count as one break. The wait happens only if more text follows. Pause freezes the timer and Skip ends the current wait. The estimate includes these waits.")
                 section("Repairs, drift, and overlay", "Delayed repairs lets a few characters pass before a correction. Fatigue drift changes the pace over a run. Fullscreen typing overlay toggles the red tint; shortcuts work either way.")
                 section("Preview and estimate", "The estimate includes planned waits and repairs. Arm typing uses the previewed plan unless you change the text, settings, or profile. \(shortcuts.bindings.skipWait.displayText) skips the current long wait.")
             }

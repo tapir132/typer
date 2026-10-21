@@ -68,6 +68,8 @@ extension TypingSettings {
         copy.mistakeLevel = min(5, max(0, mistakeLevel))
         copy.sentencePauseMinimum = sentencePauseSeconds.lowerBound
         copy.sentencePauseMaximum = sentencePauseSeconds.upperBound
+        copy.paragraphPauseMinimum = paragraphPauseMinutes.lowerBound
+        copy.paragraphPauseMaximum = paragraphPauseMinutes.upperBound
         return copy
     }
 }

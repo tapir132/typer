@@ -69,6 +69,11 @@ struct WorkspaceLayoutTests {
             model.section = .compose
             try await snapshot(RootView(model: model), name: "SentencePauses", size: NSSize(width: 1240, height: 900))
             model.settings.sentencePauses = false
+            model.settings.paragraphPauses = true
+            try await snapshot(RootView(model: model), name: "ParagraphPauses", size: NSSize(width: 1240, height: 1300))
+            try await snapshot(ParagraphPauseRangeSlider(minimum: .constant(5), maximum: .constant(10)).padding(24),
+                               name: "ParagraphPauseRange", size: NSSize(width: 354, height: 130))
+            model.settings.paragraphPauses = false
             try await snapshot(SettingsView(model: model), name: "Settings-General", size: NSSize(width: 800, height: SettingsView.height))
             try await snapshot(PlaybackCheckView(), name: "PlaybackCheck-Ready", size: NSSize(width: 820, height: 730))
             try await snapshot(PlaybackPreviewView(plan: model.previewPlan, text: model.sourceText),
@@ -82,7 +87,7 @@ struct WorkspaceLayoutTests {
             try await Task.sleep(for: .milliseconds(150))
             try await snapshot(PlaybackPreviewView(preview: preview), name: "PlaybackPreview-Wait", size: NSSize(width: 820, height: 690))
             preview.stop()
-            let progress = PlaybackProgress(fraction: 0.35, remaining: 42, waitRemaining: 6.2, pauseKind: .sentence)
+            let progress = PlaybackProgress(fraction: 0.35, remaining: 420, waitRemaining: 360, pauseKind: .paragraph)
             for paused in [false, true] {
                 try await snapshot(TypingOverlayContent(paused: paused, progress: progress, target: "TextEdit", message: nil),
                                    name: "ScreenOverlay-\(paused ? "Paused" : "Typing")", size: NSSize(width: 1240, height: 800))
@@ -171,6 +176,13 @@ struct WorkspaceLayoutTests {
         #expect(panel.styleMask.contains(.nonactivatingPanel))
         #expect(panel.collectionBehavior.contains(.fullScreenAuxiliary))
         #expect(panel.level == .statusBar)
+        let controls = TypingOverlayPanel(screenFrame: NSRect(x: -10_000, y: -10_000, width: 640, height: 470), interactive: true)
+        defer { controls.close() }
+        #expect(!controls.canBecomeKey && !controls.canBecomeMain)
+        #expect(!controls.ignoresMouseEvents)
+        #expect(controls.styleMask.contains(.nonactivatingPanel))
+        let host = TypingOverlayHostingView(rootView: Text("Controls"))
+        #expect(host.acceptsFirstMouse(for: nil))
     }
 
     private func snapshot<Content: View>(_ view: Content, name: String, size: NSSize) async throws {
@@ -184,8 +196,9 @@ struct WorkspaceLayoutTests {
         window.contentView = host
         window.orderBack(nil)
         defer { window.close() }
-        try await Task.sleep(for: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(250))
         host.layoutSubtreeIfNeeded()
+        host.display()
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))

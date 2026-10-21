@@ -69,7 +69,7 @@ final class AppModel: ObservableObject {
 
     func arm() {
         guard !controller.state.isBusy else { return }
-        guard !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard controller.canResume || !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !liveCapture.isCapturing else {
             showToast("Stop Live capture before starting playback.")
             return
@@ -80,11 +80,17 @@ final class AppModel: ObservableObject {
             requestAccessibilityPermission()
             return
         }
+        if controller.canResume { controller.resumeStopped(); return }
         if previewAppliedRevision == previewRevision, !previewPlan.events.isEmpty {
             controller.start(plan: previewPlan)
         } else {
             controller.start(text: sourceText, settings: playbackSettings, profile: playbackProfile)
         }
+    }
+
+    func startOver() {
+        controller.discardSession()
+        arm()
     }
 
     var isPreviewReady: Bool { previewAppliedRevision == previewRevision && !previewPlan.events.isEmpty }
