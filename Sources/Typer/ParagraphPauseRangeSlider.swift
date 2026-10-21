@@ -30,10 +30,12 @@ struct ParagraphPauseRangeSlider: View {
                 }
                 .frame(height: 32)
                 .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                .gesture(DragGesture(minimumDistance: 1).onChanged { value in
                     if dragging == nil {
                         dragging = abs(value.startLocation.x - left) < abs(value.startLocation.x - right) ? .minimum : .maximum
-                        if left == right { dragging = value.location.x < left ? .minimum : .maximum }
+                        // With a fixed wait the thumbs coincide. The first
+                        // movement selects which end to open, in either direction.
+                        if left == right { dragging = value.translation.width < 0 ? .minimum : .maximum }
                         focused = dragging
                     }
                     let selected = Int((Double((value.location.x - 12) / width) * 29 + 1).rounded())
