@@ -130,13 +130,51 @@ struct ComposeView: View {
                 .padding(.horizontal, 14)
             }
             .buttonStyle(PrimaryButtonStyle())
-            .disabled((!controller.canResume && model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || controller.state.isBusy)
+            .disabled((!controller.canResume && model.sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || controller.state.isBusy || controller.needsSavedRunRecovery || controller.isSavingForLater)
 
             if controller.state == .stopped && controller.canResume {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(controller.pauseMessage ?? "Your place is saved for this session. Resume gives you 5 seconds to return to the original field.")
-                        .controlNote().fixedSize(horizontal: false, vertical: true)
+                    if let saved = controller.savedRun {
+                        Label("Saved on this Mac", systemImage: "bookmark.fill")
+                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(TyperTheme.signal)
+                        Text("\(Int(saved.progress.fraction * 100))% complete · \(saved.targetName)")
+                            .font(.system(size: 10, design: .monospaced)).foregroundStyle(TyperTheme.mutedStrong)
+                        Text(saved.field == nil
+                            ? "Open the original document and restore the cursor or selection where you stopped. Resume gives you 5 seconds to focus that field."
+                            : "Open the unchanged original document. Resume gives you 5 seconds to focus its field, then restores your saved cursor.")
+                            .controlNote().fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 4) {
+                            Text("You can quit Typer and continue another time.").controlNote()
+                            HelpTip(title: "Saved run", text: QuickHelp.savedRun)
+                        }
+                        if saved.field == nil {
+                            Text(saved.cursorHint).font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(TyperTheme.mutedStrong).textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Button("Discard saved run") { controller.discardSession() }.buttonStyle(QuietButtonStyle())
+                    } else {
+                        Text("Kept in Typer. Save this run if you want to quit and return later.")
+                            .controlNote().fixedSize(horizontal: false, vertical: true)
+                        Button(controller.isSavingForLater ? "Saving…" : "Save and resume later") {
+                            controller.requestSaveForLater()
+                        }.buttonStyle(SecondaryButtonStyle()).disabled(!controller.canSaveForLater)
+                    }
+                    if let message = controller.pauseMessage {
+                        Text(message).controlNote().fixedSize(horizontal: false, vertical: true)
+                    }
                     Button("Start over from the beginning", action: model.startOver).buttonStyle(QuietButtonStyle())
+                        .disabled(controller.isSavingForLater)
+                }.padding(.top, 10)
+            }
+
+            if let error = controller.savedRunError {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(error)
+                        .controlNote().fixedSize(horizontal: false, vertical: true)
+                    if !controller.canResume {
+                        Button("Discard unreadable saved run") { controller.discardSession() }.buttonStyle(QuietButtonStyle())
+                    }
                 }.padding(.top, 10)
             }
 

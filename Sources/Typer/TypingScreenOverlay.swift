@@ -32,8 +32,9 @@ final class TypingScreenOverlay {
     var onPauseResume: (() -> Void)?
     var onSkipWait: (() -> Void)?
     var onStop: (() -> Void)?
+    var onSaveLater: (() -> Void)?
 
-    func update(state: RunState, progress: PlaybackProgress, target: String, message: String?, enabled: Bool, shortcuts: ShortcutBindings = ShortcutBindings(), stopText: String? = nil) {
+    func update(state: RunState, progress: PlaybackProgress, target: String, message: String?, enabled: Bool, shortcuts: ShortcutBindings = ShortcutBindings(), stopText: String? = nil, canSaveLater: Bool = false, saving: Bool = false) {
         guard enabled && state.isPlaybackActive else { hide(); return }
         content.paused = state == .paused
         content.progress = progress
@@ -41,6 +42,8 @@ final class TypingScreenOverlay {
         content.message = message
         content.shortcuts = shortcuts
         content.stopText = stopText
+        content.canSaveLater = canSaveLater
+        content.saving = saving
         let frames = NSScreen.screens.map(\.frame)
         if frames != screens {
             hide(); screens = frames
@@ -55,7 +58,8 @@ final class TypingScreenOverlay {
                 let controls = TypingOverlayPanel(screenFrame: cardFrame, interactive: true)
                 let host = TypingOverlayHostingView(rootView: TypingOverlayHost(presentation: content,
                     onPauseResume: { [weak self] in self?.onPauseResume?() },
-                    onSkipWait: { [weak self] in self?.onSkipWait?() }, onStop: { [weak self] in self?.onStop?() }))
+                    onSkipWait: { [weak self] in self?.onSkipWait?() }, onStop: { [weak self] in self?.onStop?() },
+                    onSaveLater: { [weak self] in self?.onSaveLater?() }))
                 host.sizingOptions = []
                 controls.contentView = host
                 controls.orderFrontRegardless()
@@ -78,6 +82,8 @@ private final class TypingOverlayPresentation: ObservableObject {
     @Published var message: String?
     @Published var shortcuts = ShortcutBindings()
     @Published var stopText: String?
+    @Published var canSaveLater = false
+    @Published var saving = false
 }
 
 private struct TypingOverlayTint: View {
@@ -90,11 +96,12 @@ private struct TypingOverlayHost: View {
     var onPauseResume: () -> Void
     var onSkipWait: () -> Void
     var onStop: () -> Void
+    var onSaveLater: () -> Void
     var body: some View {
         TypingOverlayContent(paused: presentation.paused, progress: presentation.progress,
             target: presentation.target, message: presentation.message, shortcuts: presentation.shortcuts,
             stopText: presentation.stopText, showsTint: false, onPauseResume: onPauseResume,
-            onSkipWait: onSkipWait, onStop: onStop)
+            onSkipWait: onSkipWait, onStop: onStop, canSaveLater: presentation.canSaveLater, onSaveLater: onSaveLater, saving: presentation.saving)
     }
 }
 
@@ -109,6 +116,9 @@ struct TypingOverlayContent: View {
     var onPauseResume: () -> Void = {}
     var onSkipWait: () -> Void = {}
     var onStop: () -> Void = {}
+    var canSaveLater = true
+    var onSaveLater: () -> Void = {}
+    var saving = false
 
     static func tint(paused: Bool) -> Color {
         Color(red: 0.7, green: 0.015, blue: 0.035).opacity(paused ? 0.14 : 0.28)
@@ -127,7 +137,7 @@ struct TypingOverlayContent: View {
                 Text(message ?? (paused ? "Keep the original field focused in \(target)." : "Sending keys to \(target)"))
                     .font(.system(size: 14)).multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(paused ? "Your place is saved." : progress.activity)
+                Text(paused ? "Paused. Save below to return later." : progress.activity)
                     .font(.system(size: 16, weight: .medium)).monospacedDigit()
                 ProgressView(value: progress.fraction).tint(.white)
                     .accessibilityLabel("Typing progress")
@@ -139,11 +149,17 @@ struct TypingOverlayContent: View {
                     .buttonStyle(.borderedProminent).tint(.white).foregroundStyle(Color(red: 0.2, green: 0.02, blue: 0.04))
                     .help("\(shortcuts.pause.displayText) also pauses and resumes")
                     .accessibilityIdentifier("overlay.pauseResume")
+                    .disabled(saving)
                     Button("Stop", action: onStop)
                         .buttonStyle(.bordered).controlSize(.large)
-                        .help("\(stopText ?? shortcuts.stop.displayText) · keeps your place until you quit or start over")
+                        .help("\(stopText ?? shortcuts.stop.displayText) · keeps your place in Typer. Choose Save and resume later before quitting.")
                         .accessibilityIdentifier("overlay.stop")
                 }
+                Button(saving ? "Saving…" : "Save and resume later", action: onSaveLater)
+                    .buttonStyle(.bordered).controlSize(.large)
+                    .disabled(!canSaveLater)
+                    .help("Save this run and its text on this Mac, so you can quit Typer and continue another time.")
+                    .accessibilityIdentifier("overlay.saveLater")
                 Button("Skip this wait · \(shortcuts.skipWait.displayText)", action: onSkipWait)
                     .buttonStyle(.borderless).font(.system(size: 13, weight: .medium))
                     .disabled(paused || !progress.canSkipWait)

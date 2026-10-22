@@ -32,12 +32,15 @@ final class AppModel: ObservableObject {
     private var previewTask: Task<Void, Never>?
     private var previewRevision = 0
     private var previewAppliedRevision = 0
+    private var quitObserver: NSObjectProtocol?
 
-    init(profileStore: ProfileStore? = nil, shortcuts: ShortcutManager? = nil) {
+    init(profileStore: ProfileStore? = nil, shortcuts: ShortcutManager? = nil, savedRuns: SavedRunStore? = nil) {
         profiles = profileStore ?? ProfileStore()
         preferences = SettingsStore(defaults: profiles.defaults)
-        controller = TypingController(shortcuts: shortcuts ?? ShortcutManager(defaults: profiles.defaults))
+        let savedRuns = savedRuns ?? (profileStore == nil ? .applicationStore() : SavedRunStore(url: nil))
+        controller = TypingController(shortcuts: shortcuts ?? ShortcutManager(defaults: profiles.defaults), savedRuns: savedRuns)
         settings = preferences.settings
+        if let saved = controller.savedRun { sourceText = saved.context.text; settings = saved.context.settings.sanitized }
         controller.overlayEnabled = settings.showTypingOverlay
         if CommandLine.arguments.contains("--train") { section = .train }
         if CommandLine.arguments.contains("--profiles") { section = .profiles }
@@ -49,6 +52,21 @@ final class AppModel: ObservableObject {
         profiles.onChange = { [weak self] in self?.schedulePreviewRefresh() }
         refreshPermissions()
         refreshPreviewImmediately()
+        quitObserver = NotificationCenter.default.addObserver(forName: .typerWillQuit, object: nil, queue: .main) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self, let request = notification.object as? TyperQuitRequest else { return }
+                request.prepare.append { [weak self, weak request] in
+                    guard let self else { return true }
+                    let ready = await self.controller.prepareForQuit()
+                    if !ready { request?.error = self.controller.savedRunError }
+                    return ready
+                }
+            }
+        }
+    }
+
+    deinit {
+        if let quitObserver { NotificationCenter.default.removeObserver(quitObserver) }
     }
 
     func paste() {
@@ -69,6 +87,10 @@ final class AppModel: ObservableObject {
 
     func arm() {
         guard !controller.state.isBusy else { return }
+        guard !controller.needsSavedRunRecovery else {
+            showToast("Discard the unreadable saved run before starting a new one.")
+            return
+        }
         guard controller.canResume || !sourceText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         guard !liveCapture.isCapturing else {
             showToast("Stop Live capture before starting playback.")
@@ -82,15 +104,14 @@ final class AppModel: ObservableObject {
         }
         if controller.canResume { controller.resumeStopped(); return }
         if previewAppliedRevision == previewRevision, !previewPlan.events.isEmpty {
-            controller.start(plan: previewPlan)
+            controller.start(plan: previewPlan, context: TypingRunContext(text: sourceText, settings: playbackSettings))
         } else {
             controller.start(text: sourceText, settings: playbackSettings, profile: playbackProfile)
         }
     }
 
     func startOver() {
-        controller.discardSession()
-        arm()
+        if controller.discardSession() { arm() }
     }
 
     var isPreviewReady: Bool { previewAppliedRevision == previewRevision && !previewPlan.events.isEmpty }

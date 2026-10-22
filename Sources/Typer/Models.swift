@@ -246,6 +246,19 @@ struct TypingPlan: Codable, Equatable {
     var effectiveWPM: Int
 }
 
+/// The next physical action and virtual clock are captured under the output
+/// lock. An unfinished accent is dismissed on pause, then replayed on resume.
+struct PlaybackCheckpoint: Codable, Equatable {
+    var nextAction: Int
+    var elapsed: Double
+    var rewindOwner: Int?
+}
+
+struct TypingRunContext: Codable, Equatable {
+    var text: String
+    var settings: TypingSettings
+}
+
 struct TrainingKeyRecord: Codable, Equatable {
     enum Kind: String, Codable { case character, backspace, wordDelete, selection, navigation, boundary }
     var id: UUID

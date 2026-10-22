@@ -172,7 +172,7 @@ enum KeyTimeline {
 
 }
 
-struct PhysicalKeyAction: Equatable {
+struct PhysicalKeyAction: Codable, Equatable {
     var code: UInt16
     var isDown: Bool
     var shift: Bool
@@ -196,7 +196,8 @@ final class PlaybackSession: @unchecked Sendable {
     private var pressed: [UInt16: PhysicalKeyAction] = [:]
     private var compositionOwner: Int?
     private var rewindOwner: Int?
-    private let layout: KeyboardLayout
+    let layout: KeyboardLayout
+    private var nextAction = 0
     private var shiftDown = false
     private var optionDown = false
     private var paused = false
@@ -208,6 +209,16 @@ final class PlaybackSession: @unchecked Sendable {
     private let emit: (PhysicalKeyAction) -> Bool
 
     init(layout: KeyboardLayout = .us, emit: @escaping (PhysicalKeyAction) -> Bool) { self.layout = layout; self.emit = emit }
+
+    /// Install a restored cursor before dispatching the worker. Saving or
+    /// quitting immediately after Resume must not fall back to position zero.
+    func prepare(checkpoint: PlaybackCheckpoint) {
+        condition.lock(); defer { condition.unlock() }
+        guard origin == nil else { return }
+        nextAction = checkpoint.nextAction
+        skipped = checkpoint.elapsed
+        rewindOwner = checkpoint.rewindOwner
+    }
 
     func cancel() {
         condition.lock()
@@ -222,7 +233,7 @@ final class PlaybackSession: @unchecked Sendable {
         guard !paused, !cancelled, !failed else { return }
         paused = true
         pauseBegan = ProcessInfo.processInfo.systemUptime
-        rewindOwner = compositionOwner
+        rewindOwner = compositionOwner ?? rewindOwner
         releaseAll()
         condition.broadcast()
     }
@@ -234,6 +245,12 @@ final class PlaybackSession: @unchecked Sendable {
         self.pauseBegan = nil
         paused = false
         condition.broadcast()
+    }
+
+    func checkpoint() -> PlaybackCheckpoint? {
+        condition.lock(); defer { condition.unlock() }
+        guard paused, !cancelled, !failed else { return nil }
+        return PlaybackCheckpoint(nextAction: nextAction, elapsed: elapsed(), rewindOwner: rewindOwner)
     }
 
     @discardableResult func skipWait() -> Bool {
@@ -249,7 +266,7 @@ final class PlaybackSession: @unchecked Sendable {
 
     // All scheduler clock fields are protected by condition.
     private func elapsed() -> Double {
-        guard let origin else { return 0 }
+        guard let origin else { return max(0, skipped) }
         return max(0, (pauseBegan ?? ProcessInfo.processInfo.systemUptime) - origin - suspended + skipped)
     }
 
@@ -291,7 +308,7 @@ final class PlaybackSession: @unchecked Sendable {
         return true
     }
 
-    func run(plan: TypingPlan, onStart: ((Double) -> Void)? = nil,
+    func run(plan: TypingPlan, checkpoint: PlaybackCheckpoint? = nil, onStart: ((Double) -> Void)? = nil,
              onProgress: ((PlaybackProgress) -> Void)? = nil) -> Outcome {
         let actions = KeyTimeline.physicalActions(for: plan.events, layout: layout)
         let duration = actions.last?.scheduledOffset ?? 0
@@ -301,6 +318,15 @@ final class PlaybackSession: @unchecked Sendable {
         }
         let origin = ProcessInfo.processInfo.systemUptime
         condition.lock()
+        if let checkpoint {
+            guard (0...actions.count).contains(checkpoint.nextAction), checkpoint.elapsed.isFinite, checkpoint.elapsed >= 0,
+                  checkpoint.rewindOwner.map({ plan.events.indices.contains($0) }) ?? true else {
+                condition.unlock(); return .failed
+            }
+            nextAction = checkpoint.nextAction
+            skipped = checkpoint.elapsed
+            rewindOwner = checkpoint.rewindOwner
+        }
         self.origin = origin
         if paused { pauseBegan = origin }
         condition.unlock()
@@ -309,7 +335,7 @@ final class PlaybackSession: @unchecked Sendable {
             condition.lock(); releaseAll(); condition.unlock()
         }
         var lastReport = -Double.infinity
-        var position = 0
+        var position = nextAction
         while position < actions.count {
             var restarted = false
             while true {
@@ -322,7 +348,7 @@ final class PlaybackSession: @unchecked Sendable {
                 if !paused, let owner = rewindOwner,
                    let restart = actions.firstIndex(where: { $0.ownerIndex == owner }) {
                     suspended += max(0, elapsed() - (actions[restart].scheduledOffset ?? 0) / 1_000)
-                    position = restart; rewindOwner = nil; restarted = true
+                    position = restart; nextAction = restart; rewindOwner = nil; restarted = true
                     condition.unlock(); break
                 }
                 let action = actions[position], offset = action.scheduledOffset ?? 0
@@ -332,6 +358,7 @@ final class PlaybackSession: @unchecked Sendable {
                 waitOffset = longWait ? offset / 1_000 : nil
                 if !paused && remaining <= 0 {
                     let success = performLocked(action)
+                    if success { position += 1; nextAction = position }
                     condition.unlock()
                     if !success { return .failed }
                     break
@@ -355,7 +382,7 @@ final class PlaybackSession: @unchecked Sendable {
                 }
                 condition.unlock()
             }
-            if !restarted { position += 1 }
+            if restarted { continue }
         }
         onProgress?(PlaybackProgress(fraction: 1))
         condition.lock(); defer { condition.unlock() }

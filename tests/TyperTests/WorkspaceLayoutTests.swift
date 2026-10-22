@@ -5,6 +5,35 @@ import Testing
 
 @MainActor
 struct WorkspaceLayoutTests {
+    @Test func savedRunSnapshots() async throws {
+        guard ProcessInfo.processInfo.environment["TYPER_LAYOUT_SNAPSHOTS"] != nil else { return }
+        _ = NSApplication.shared
+        let suite = "typer.saved-layout.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let normalized = KeyTimeline.normalized([
+            PlannedEvent(kind: .character, value: "A", flight: 10, dwell: 20),
+            PlannedEvent(kind: .character, value: "B", flight: 300_000, dwell: 20, pauseKind: .paragraph)
+        ])
+        let plan = TypingPlan(events: normalized.events, duration: normalized.duration, repairs: 0, effectiveWPM: 0)
+        let store = SavedRunStore(url: nil)
+        var run = SavedTypingRun(context: TypingRunContext(text: "A short draft to continue tomorrow.", settings: TypingSettings()),
+            plan: plan, checkpoint: PlaybackCheckpoint(nextAction: 2, elapsed: 0.03), layoutIdentifier: KeyboardLayout.us.identifier,
+            actions: KeyTimeline.physicalActions(for: plan.events), targetBundleIdentifier: "com.apple.TextEdit", targetName: "TextEdit")
+        for manual in [false, true] {
+            run.field = manual ? nil : SavedFieldState(documentDigest: SavedFieldState.digest("A"), selection: NSRange(location: 1, length: 0))
+            try store.save(run)
+            let model = AppModel(profileStore: ProfileStore(defaults: defaults),
+                shortcuts: ShortcutManager(defaults: defaults, driver: TestShortcutDriver()), savedRuns: store)
+            for size in [NSSize(width: 1240, height: 800), NSSize(width: 920, height: 660)] {
+                try await snapshot(RootView(model: model), name: "SavedRun-\(manual ? "Manual" : "Cursor")-\(Int(size.width))", size: size)
+            }
+        }
+        let progress = PlaybackProgress(fraction: 0.35, remaining: 420, isPaused: true)
+        try await snapshot(TypingOverlayContent(paused: true, progress: progress, target: "TextEdit", message: nil,
+            canSaveLater: true), name: "ScreenOverlay-SaveLater", size: NSSize(width: 1240, height: 800))
+    }
+
     @Test func switchingSectionsKeepsHeaderAtTheSameWindowPosition() async throws {
         _ = NSApplication.shared
         // Exercise a real older-profile row without reading or changing the
@@ -202,6 +231,7 @@ struct WorkspaceLayoutTests {
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try FileManager.default.createDirectory(at: URL(fileURLWithPath: directory), withIntermediateDirectories: true)
         try png.write(to: URL(fileURLWithPath: directory).appendingPathComponent("\(name).png"))
     }
 }

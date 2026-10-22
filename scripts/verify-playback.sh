@@ -12,7 +12,7 @@ cd "$PROJECT_ROOT"
 # Compile the production components, without loading Typer's user preferences,
 # application model, updater or global capture.
 swiftc -swift-version 5 -warnings-as-errors -parse-as-library \
-  Sources/Typer/Models.swift Sources/Typer/GlobalTrainingCapture.swift Sources/Typer/Theme.swift Sources/Typer/HelpTip.swift \
+  Sources/Typer/AppLifecycle.swift Sources/Typer/Models.swift Sources/Typer/PlaybackTextBuffer.swift Sources/Typer/SavedRunStore.swift Sources/Typer/GlobalTrainingCapture.swift Sources/Typer/Theme.swift Sources/Typer/HelpTip.swift \
   Sources/Typer/TimingEvidence.swift Sources/Typer/PauseLearning.swift Sources/Typer/TypingEngine.swift \
   Sources/Typer/KeyboardLayout.swift Sources/Typer/KeyTimeline.swift Sources/Typer/ShortcutBinding.swift Sources/Typer/ShortcutManager.swift Sources/Typer/TypingController.swift \
   Sources/Typer/TrackingTextView.swift Sources/Typer/TypingScreenOverlay.swift Sources/Typer/PlaybackCheck.swift \
@@ -50,6 +50,14 @@ python3 - "$OUTPUT" <<'PY'
 import json, pathlib, sys
 folder = pathlib.Path(sys.argv[1])
 result = json.loads((folder / 'result.json').read_text())
+if result['passed']:
+    checkpoint = json.loads((folder / result['quitCheckpoint']).read_text())
+    assert checkpoint['context']['text'] == 'ab'
+    assert checkpoint['checkpoint']['nextAction'] == 2
+    assert checkpoint['checkpoint']['elapsed'] >= 0.03
+    assert (folder / result['quitCheckpoint']).stat().st_mode & 0o777 == 0o600
+    result['normalQuitSavedUpdatedPosition'] = True
+    (folder / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
 print(json.dumps(result, indent=2))
 print('Reports and screenshots:', folder)
 if not result['passed']:

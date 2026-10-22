@@ -64,7 +64,6 @@ struct RootView: View {
         .sheet(isPresented: $model.showsSettings) { SettingsView(model: model) }
         .onReceive(NotificationCenter.default.publisher(for: .typerWillQuit)) { _ in
             model.showsSettings = false
-            model.controller.discardSession()
         }
         .onAppear { updates.start() }
         .onChange(of: controller.state) { _, state in
@@ -73,7 +72,8 @@ struct RootView: View {
                 model.showToast("Typing complete.")
                 Task { try? await Task.sleep(for: .seconds(1.8)); controller.reset() }
             case .stopped:
-                model.showToast(controller.canResume ? "Stopped. Your place is saved until you quit or start over." : "Typing stopped.")
+                model.showToast(controller.savedRun != nil ? "Run saved. You can quit Typer and resume later."
+                    : controller.canResume ? "Stopped. Choose Save and resume later to keep this run after quitting." : "Typing stopped.")
                 Task { try? await Task.sleep(for: .seconds(1.4)); controller.reset() }
             case .error(let message): model.showToast(message)
             default: break
@@ -185,7 +185,7 @@ struct RootView: View {
                     .font(.system(size: 28, weight: .medium))
                     .foregroundStyle(TyperTheme.signal)
                 Text(controller.state == .paused ? "Typing is paused" : controller.progress.activity).font(.system(size: 20, weight: .semibold))
-                Text(controller.pauseMessage ?? "\(shortcuts.bindings.pause.displayText) pause/resume · \(shortcuts.stopDescription) stop")
+                Text(controller.savedRunError ?? controller.pauseMessage ?? "\(shortcuts.bindings.pause.displayText) pause/resume · \(shortcuts.stopDescription) stop")
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(TyperTheme.mutedStrong)
                 if controller.state == .paused {
@@ -194,7 +194,7 @@ struct RootView: View {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                             if controller.state == .paused { controller.togglePause() }
                         }
-                    }.buttonStyle(SecondaryButtonStyle())
+                    }.buttonStyle(SecondaryButtonStyle()).disabled(controller.isSavingForLater)
                     Text("Focus the same field, then press \(shortcuts.bindings.pause.displayText).").font(.caption).foregroundStyle(TyperTheme.mutedStrong)
                 } else {
                     Button("Pause typing") { controller.pause() }.buttonStyle(SecondaryButtonStyle())
@@ -204,6 +204,11 @@ struct RootView: View {
                 Button("Stop typing") { controller.stop() }
                     .buttonStyle(SecondaryButtonStyle())
                     .padding(.top, 4)
+                Button(controller.isSavingForLater ? "Saving…" : "Save and resume later") {
+                    controller.requestSaveForLater()
+                }.buttonStyle(SecondaryButtonStyle()).disabled(!controller.canSaveForLater)
+                Text("Saves your text and position on this Mac, even after quitting.")
+                    .font(.caption).foregroundStyle(TyperTheme.mutedStrong).multilineTextAlignment(.center)
             }
             .padding(32)
             .frame(width: 390)

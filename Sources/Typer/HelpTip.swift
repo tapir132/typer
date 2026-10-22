@@ -33,6 +33,7 @@ struct HelpTip: View {
 }
 
 enum QuickHelp {
+    static let savedRun = "Save your text and exact place on this Mac, then quit and return later. Reopen the unchanged original document and choose Resume typing. Typer restores the cursor where supported; other apps show a manual cursor hint. Resumed saved runs save again on normal Quit. Completion or Discard removes the saved file."
     static let sentencePauses = "Waits after each sentence when more text follows. Choose a random range, or equal Min and Max for a fixed wait. Works in Clean too; overlapping pauses use the longer wait."
     static let paragraphPauses = "Waits between paragraphs, after one or more line breaks, when more text follows. Drag both handles to choose 1–30 minutes. Set both to 5 for a fixed five-minute wait. The longer boundary pause wins. Skip ends the current wait; Pause freezes it. Turn off to skip paragraph waits entirely."
     static let legacyProfile = "Still usable for playback. Training and validation are locked; new samples build My rhythm separately. You can keep this profile."
