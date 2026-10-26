@@ -198,6 +198,11 @@ enum TypingEngine {
         let learnedError = profile.sampleCount > 0 ? min(0.055, max(0.004, profile.backspaceRate * 0.82)) : 0.018
         // Error frequency is its own control. Timing variation only shapes timing.
         let errorRate = settings.mode == .clean || settings.mistakeLevel == 0 ? 0 : learnedError * (0.38 + Double(settings.mistakeLevel) * 0.31)
+        // Typists slow down for a few keys after fixing an error. The 1.1 default
+        // is an engineering choice; measured ratios replace it as evidence grows.
+        let observedRecovery = (evidence?.postRepairRatios ?? []).filter { $0.isFinite && (0.3...4).contains($0) }
+        let recoveryWeight = Double(observedRecovery.count) / Double(observedRecovery.count + 24)
+        let recoveryRatio = 1.1 + (min(2, max(0.7, median(observedRecovery))) - 1.1) * recoveryWeight
 
         var events: [PlannedEvent] = []
         events.reserveCapacity(sourceCharacterCount + max(16, sourceCharacterCount / 20))
@@ -208,6 +213,7 @@ enum TypingEngine {
         var motorDrift = 0.0
         var pauseCandidates: [Int: PauseContext] = [:]
         var cadencePause: PlannedPauseKind?
+        var recoveryKeys = 0
 
         func unit() -> Double { Double.random(in: 0..<1, using: &random) }
         func gaussian() -> Double {
@@ -242,6 +248,11 @@ enum TypingEngine {
             motorDrift = motorDrift * 0.86 + gaussian() * 0.025 * realism
             var interval = timing.interval * exp(motorDrift)
             interval *= 1 + ((burstRemaining > 0 ? 0.90 : 1.16) - 1) * realism
+            // Matches extraction: the three character-to-character intervals after a repair.
+            if recoveryKeys > 0 && !previousCharacter.isEmpty {
+                interval *= 1 + (recoveryRatio - 1) * realism
+                recoveryKeys -= 1
+            }
             burstRemaining -= 1
             if burstRemaining < 0 { burstRemaining = max(3, Int((profile.burstLength * (0.65 + unit() * 0.8)).rounded())) }
             let boundaryConfidence = exactPairs[pair]?.confidence ?? 0
@@ -289,6 +300,7 @@ enum TypingEngine {
             let dwell = bounded(profile.dwellMedian * exp(gaussian() * 0.16), 20, 180)
             events.append(PlannedEvent(kind: kind, flight: bounded(delay, 20, 8_000), dwell: dwell, pauseKind: delay >= 1_000 ? .repair : nil))
             previousCharacter = "" // Corrections are not ordinary motor digraphs.
+            recoveryKeys = 3
         }
 
         let tokens = tokenize(text, sentencePauses: settings.sentencePauses || !learnedContexts.isEmpty)
@@ -314,6 +326,21 @@ enum TypingEngine {
                 pauseCandidates[events.count] = .word
             }
             let token = tokens[tokenIndex].text
+            if token == " ", tokenIndex > 0, !tokens[tokenIndex - 1].endsSentence, tokenIndex + 1 < tokens.count,
+               tokens[tokenIndex - 1].text.last?.isLetter == true,
+               case let next = Array(tokens[tokenIndex + 1].text.prefix { $0.isLetter }), next.count >= 3,
+               unit() < errorRate * 1.5 {
+                // Missed space: run into the next word, notice, delete back, add the space.
+                let ahead = min(next.count - 1, 1 + Int(unit() * 3))
+                next.prefix(ahead).forEach { appendCharacter(String($0)) }
+                for erased in 0..<ahead {
+                    appendKey(.backspace, delay: erased == 0 ? profile.repairDelay * (0.5 + unit()) : 36 + unit() * 34)
+                }
+                appendCharacter(" ")
+                repairs += 1
+                tokenIndex += 1
+                continue
+            }
             // Typos land on the word, so `"Hello,` and `end.` can still be mistyped.
             let lead = token.prefix { !$0.isLetter }
             let word = String(token.dropFirst(lead.count).prefix { $0.isLetter || $0 == "'" })
@@ -389,15 +416,22 @@ enum TypingEngine {
                     }
                 }
             } else if choice < 0.43 && mistakeIndex + 1 < characters.count {
+                // Skilled typists' transpositions mostly cross hands (Grudin, 1983),
+                // where both keys can be in flight at once.
+                let crossHand = (1..<(characters.count - 1)).filter {
+                    KeyboardTransition.classify(String(characters[$0]), String(characters[$0 + 1])) == "alternatingHands"
+                }
+                let swapRoll = unit(), swapPick = unit()
+                let swapAt = !crossHand.isEmpty && swapRoll < 0.8 ? crossHand[min(crossHand.count - 1, Int(swapPick * Double(crossHand.count)))] : mistakeIndex
                 for index in characters.indices {
-                    if index == mistakeIndex {
+                    if index == swapAt {
                         appendCharacter(String(characters[index + 1]))
                         appendCharacter(String(characters[index]))
                         appendKey(.backspace, delay: profile.repairDelay * (0.5 + unit()))
                         appendKey(.backspace, delay: 45 + unit() * 34)
                         appendCharacter(String(characters[index]), speedMultiplier: 0.8)
                         appendCharacter(String(characters[index + 1]), speedMultiplier: 0.8)
-                    } else if index != mistakeIndex + 1 {
+                    } else if index != swapAt + 1 {
                         appendCharacter(String(characters[index]))
                     }
                 }

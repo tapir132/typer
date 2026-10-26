@@ -1,6 +1,6 @@
 # Typer
 
-Typer is a fully native SwiftUI macOS app that performs pasted text with human cadence. It supports selectable WPM, overlapping key presses, signed flight time, paired dwell/interval observations, per-digraph timing, punctuation and thinking pauses, adjacent-key slips, transpositions, duplicate keys, omission/insertion repairs, whole-word substitutions, immediate backspaces, delayed repairs, fatigue drift, and learned personal typing profiles.
+Typer is a fully native SwiftUI macOS app that performs pasted text with human cadence. It supports selectable WPM, overlapping key presses, signed flight time, paired dwell/interval observations, per-digraph timing, punctuation and thinking pauses, adjacent-key slips, transpositions, duplicate keys, omission/insertion repairs, missed spaces, whole-word substitutions, immediate backspaces, delayed repairs, post-repair slowing, fatigue drift, and learned personal typing profiles.
 
 ## Run it
 
@@ -46,7 +46,7 @@ Compose remembers controls across launches. The **Preset** menu includes Quick m
 
 Open the gear (or press **⌘,**) for **Settings → Guide**, or use **Help → Typer Guide**. Short topic-based answers cover first runs, controls, training, measurements, validation, privacy, and updates, with extra details folded away. Hover or click a small **?** beside a control for quick help. Opening Settings preserves your current workspace and unfinished training exercise.
 
-Use **Train** in three ways: **Copy** learns exact errors and digraphs, **Freewrite** learns organic thought pauses, and **Sprint** learns fast bursts and recovery reflexes. The profiler measures dwell time, flight time, press-to-press digraph latency, timing variation, burst length, correction rate, detection delay, repair latency, and recurring substitutions. Profiles and samples stay in macOS user defaults on this Mac.
+Use **Train** in three ways: **Copy** learns exact errors and digraphs, **Freewrite** learns organic thought pauses, and **Sprint** learns fast bursts and recovery reflexes. The profiler measures dwell time, flight time, press-to-press digraph latency, timing variation, burst length, correction rate, detection delay, repair latency, post-repair pace, and recurring substitutions. Profiles and samples stay in macOS user defaults on this Mac.
 
 **Live capture** is an optional fourth mode for learning while you write in Google Docs or another application. It uses a listen-only event tap, never intercepts or delays the target application's input, pauses while macOS Secure Input is enabled, stops automatically after one hour, and discards raw keystrokes when the session ends. Only derived timing and correction statistics are saved. Live capture requires the separate macOS **Input Monitoring** permission and never starts without an explicit click.
 

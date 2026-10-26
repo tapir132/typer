@@ -6,7 +6,7 @@ The latest two eligible sessions are held out together. Only earlier sessions (u
 
 The default overview reports median W1 distances and their minimum–maximum range across paired trials. A pair must share held-out session, training session indices, seed, WPM and matched-text status. Both modes need an available distance for the metric; unavailable data stay unavailable. Different seeds share the same human observations and are not independent human replicates. The human-to-human reference can include different passages and is not a pass threshold.
 
-Use **Export report…** for a reproducible version-2 JSON result containing model version (`paired-timing-v3-context-pauses`), training/held-out session indices, seeds, WPM, context, matched-text status, distances, medians, median absolute deviations, counts and limitations. It contains no captured document text. The full calculations are in `Sources/Typer/TypingValidation.swift`; run their deterministic fixtures with:
+Use **Export report…** for a reproducible version-2 JSON result containing model version (`paired-timing-v6-repair-recovery`), training/held-out session indices, seeds, WPM, context, matched-text status, distances, medians, median absolute deviations, counts and limitations. It contains no captured document text. The full calculations are in `Sources/Typer/TypingValidation.swift`; run their deterministic fixtures with:
 
 ```sh
 swift test -Xswiftc -warnings-as-errors
@@ -20,6 +20,7 @@ swift test -Xswiftc -warnings-as-errors
 - Rollover: fraction of eligible adjacent character pairs whose signed flight is negative. This denominator differs from papers using all keypresses.
 - KS distance: largest absolute difference between empirical cumulative distributions, from zero to one.
 - Wasserstein-1 (W1): area between those cumulative distributions. Timing W1 is in milliseconds; burst and deletion-run W1 uses keys/actions.
+- Post-repair pace: each of the first three character-to-character DD values after a Backspace or word-delete run, divided by that session's median motor DD and shown as a percentage. The generator's 110% default without evidence is an engineering choice.
 - Missing/empty metrics return unavailable. Zero is reserved for a measured zero difference.
 - Autocorrelation: Pearson correlation between adjacent eligible DD values, without crossing edits, invalid intervals or capture boundaries. Undefined for fewer than three interval pairs or zero variance.
 

@@ -55,7 +55,7 @@ struct ValidationTrial: Codable, Equatable {
 
 struct ValidationReport: Codable, Equatable {
     var schemaVersion = 2
-    var modelVersion = "paired-timing-v5-predictive-mixture"
+    var modelVersion = "paired-timing-v6-repair-recovery"
     var createdAt: Date
     var context: String
     var eligibleSessions: Int
@@ -134,6 +134,7 @@ enum TypingValidation {
         add("Burst length (< 310 ms)", reference.burstLengths, candidate.burstLengths, unit: "keys")
         add("Deletion run", reference.deletionRuns, candidate.deletionRuns, unit: "actions")
         add("Pre-deletion interval", reference.repairLatencies, candidate.repairLatencies)
+        add("Post-repair pace", (reference.postRepairRatios ?? []).map { $0 * 100 }, (candidate.postRepairRatios ?? []).map { $0 * 100 }, unit: "% of median")
         for context in PauseContext.allCases {
             add("Pause: \(context.label)", reference.pauseContexts?[context.rawValue]?.validDurations ?? [],
                 candidate.pauseContexts?[context.rawValue]?.validDurations ?? [])

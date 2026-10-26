@@ -54,6 +54,9 @@ struct TimingEvidence: Codable, Equatable {
     var missingDwellCount = 0
     var excludedTransitionCount = 0
     var pauseContexts: [String: PauseDistribution]? = nil
+    /// The first three character intervals after each deletion run, divided by
+    /// the session's median motor interval. Optional so older samples decode.
+    var postRepairRatios: [Double]? = nil
 
     var excludingPauses: TimingEvidence {
         var result = self
@@ -128,8 +131,18 @@ struct TimingEvidence: Codable, Equatable {
         var lastCharacter: TrainingKeyRecord?
         var mistakenAt: Int?
         var typedSinceMistake = 0
+        let motorCenter = TypingEngine.median(consecutiveIntervals)
+        var recoveryLeft = 0
+        var recovery: [Double] = []
         for (index, record) in records.enumerated() {
             if record.kind != .character && record.kind != .boundary { evidence.editCounts[record.kind.rawValue, default: 0] += 1 }
+            if record.kind == .character, recoveryLeft > 0, index > 0, records[index - 1].kind == .character, motorCenter > 0 {
+                let delta = record.pressTime - records[index - 1].pressTime
+                if delta.isFinite && (15...2_500).contains(delta) { recovery.append(delta / motorCenter) }
+                recoveryLeft -= 1
+            }
+            if record.kind == .backspace || record.kind == .wordDelete { recoveryLeft = 3 }
+            else if record.kind != .character { recoveryLeft = 0 }
             if record.kind == .backspace || record.kind == .wordDelete {
                 if deletionRun == 0, let lastCharacter {
                     let latency = record.pressTime - lastCharacter.pressTime
@@ -155,6 +168,7 @@ struct TimingEvidence: Codable, Equatable {
         evidence.deletionRuns = boundedSample(evidence.deletionRuns, limit: 256)
         evidence.repairLatencies = boundedSample(evidence.repairLatencies, limit: 256)
         evidence.detectionDistances = boundedSample(evidence.detectionDistances, limit: 256)
+        evidence.postRepairRatios = boundedSample(recovery, limit: 256)
         return evidence
     }
 
@@ -183,6 +197,8 @@ struct TimingEvidence: Codable, Equatable {
         result.dwells = pool(\.dwells); result.pauses = pool(\.pauses); result.burstLengths = pool(\.burstLengths)
         result.deletionRuns = pool(\.deletionRuns); result.repairLatencies = pool(\.repairLatencies)
         result.detectionDistances = pool(\.detectionDistances)
+        let recovery = samples.compactMap(\.postRepairRatios)
+        result.postRepairRatios = recovery.isEmpty ? nil : boundedSample(recovery.flatMap { boundedSample($0.filter(\.isFinite), limit: 128) }, limit: 512)
         for sample in samples {
             for (key, count) in sample.editCounts { result.editCounts[key, default: 0] += min(2_000, max(0, count)) }
             result.missingDwellCount += sample.missingDwellCount

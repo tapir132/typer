@@ -42,6 +42,45 @@ struct TypingEngineTests {
         #expect(repairs > 0)
     }
 
+    @Test func missedSpacesRunIntoTheNextWordAndAreRepaired() {
+        let text = "several ordinary words follow each other here without punctuation at all"
+        var settings = TypingSettings()
+        settings.mistakeLevel = 5
+        var missedSpaces = 0
+        for seed in 1...60 {
+            var random = TestGenerator(seed: UInt64(seed))
+            let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: .baseline(), using: &random)
+            #expect(apply(plan.events) == text, "Failed seed \(seed)")
+            missedSpaces += zip(plan.events, plan.events.dropFirst()).filter { $0.kind == .backspace && $1.value == " " }.count
+        }
+        #expect(missedSpaces > 0)
+    }
+
+    @Test func postRepairSlowingIsLearnedAndReplayed() {
+        let records = [("a", 0.0), ("b", 100), ("c", 200), ("d", 300), ("x", 400)].map {
+            TrainingKeyRecord(id: UUID(), kind: .character, key: $0.0, expected: "", pressTime: $0.1, dwell: 70, cursor: 0)
+        } + [TrainingKeyRecord(id: UUID(), kind: .backspace, key: "Backspace", expected: "", pressTime: 700, cursor: 0)]
+          + [("e", 800.0), ("f", 1_000), ("g", 1_200), ("h", 1_400)].map {
+            TrainingKeyRecord(id: UUID(), kind: .character, key: $0.0, expected: "", pressTime: $0.1, dwell: 70, cursor: 0)
+        }
+        let ratios = TimingEvidence.extract(records).postRepairRatios ?? []
+        #expect(ratios.count == 3 && ratios.allSatisfy { $0 > 1.5 })
+
+        func duration(ratio: Double) -> Double {
+            var evidence = TimingEvidence()
+            evidence.postRepairRatios = Array(repeating: ratio, count: 200)
+            var profile = TypingProfile.baseline()
+            profile.sampleCount = 1
+            profile.evidence = evidence
+            var settings = TypingSettings()
+            settings.mistakeLevel = 5
+            var random = TestGenerator(seed: 7)
+            return TypingEngine.generatePlan(text: "Several ordinary words give corrections room to slow the following keys.",
+                                             settings: settings, profile: profile, using: &random).duration
+        }
+        #expect(duration(ratio: 2) > duration(ratio: 1))
+    }
+
     @Test func cleanModeProducesNoCorrections() {
         var random = TestGenerator(seed: 4)
         var settings = TypingSettings()
