@@ -10,7 +10,8 @@ struct TypingEngineTests {
             "Your update is definitely ready, and it's really good.",
             "First line.\nSecond line with\ta tab.",
             "Unicode survives — café, naïve, and 👋.\n    Indentation survives too.",
-            "A longer sample because mistakes can appear in several different words and still resolve cleanly."
+            "A longer sample because mistakes can appear in several different words and still resolve cleanly.",
+            "\"Hello,\" she said. (Really?) Don't-stop... LOUD WORDS, quietly; their end."
         ]
         for seed in 1...100 {
             for input in inputs {
@@ -25,6 +26,20 @@ struct TypingEngineTests {
                 #expect(plan.events.allSatisfy { $0.flight.isFinite && $0.dwell >= 19.999 && $0.dwell <= 250.001 })
             }
         }
+    }
+
+    @Test func wordsBesidePunctuationCanBeMistyped() {
+        let text = "\"Quickly,\" gently. Swiftly; boldly! Proudly? (Calmly)"
+        var settings = TypingSettings()
+        settings.mistakeLevel = 5
+        var repairs = 0
+        for seed in 1...60 {
+            var random = TestGenerator(seed: UInt64(seed))
+            let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: .baseline(), using: &random)
+            #expect(apply(plan.events) == text, "Failed seed \(seed)")
+            repairs += plan.repairs
+        }
+        #expect(repairs > 0)
     }
 
     @Test func cleanModeProducesNoCorrections() {

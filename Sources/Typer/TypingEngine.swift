@@ -314,25 +314,22 @@ enum TypingEngine {
                 pauseCandidates[events.count] = .word
             }
             let token = tokens[tokenIndex].text
-            guard token.rangeOfCharacter(from: .letters) != nil, token.count >= 3 else {
+            // Typos land on the word, so `"Hello,` and `end.` can still be mistyped.
+            let lead = token.prefix { !$0.isLetter }
+            let word = String(token.dropFirst(lead.count).prefix { $0.isLetter || $0 == "'" })
+            let trail = token.dropFirst(lead.count + word.count)
+            guard word.count >= 3, !trail.contains(where: \.isLetter), unit() < errorRate * Double(word.count) else {
                 token.forEach { appendCharacter(String($0)) }
                 tokenIndex += 1
                 continue
             }
+            lead.forEach { appendCharacter(String($0)) }
 
-            let lettersOnly = token.allSatisfy { $0.isLetter || $0 == "'" }
-            let shouldMistake = lettersOnly && unit() < errorRate * Double(token.count)
-            guard shouldMistake else {
-                token.forEach { appendCharacter(String($0)) }
-                tokenIndex += 1
-                continue
-            }
-
-            let lower = token.lowercased()
+            let lower = word.lowercased()
             if let confused = commonConfusions[lower], unit() < 0.22 {
-                let wrong = token.first?.isUppercase == true ? confused.prefix(1).uppercased() + confused.dropFirst() : confused
+                let wrong = word.first?.isUppercase == true ? confused.prefix(1).uppercased() + confused.dropFirst() : confused
                 wrong.forEach { appendCharacter(String($0)) }
-                let canDelay = settings.delayedRepairs && tokenIndex + 2 < tokens.count && tokens[tokenIndex + 1].text.allSatisfy { $0 == " " } && unit() < 0.46
+                let canDelay = settings.delayedRepairs && trail.isEmpty && tokenIndex + 2 < tokens.count && tokens[tokenIndex + 1].text.allSatisfy { $0 == " " } && unit() < 0.46
                 let editCounts = evidence?.editCounts ?? [:]
                 let editTotal = Double(editCounts.values.reduce(0, +))
                 let editWeight = min(0.75, editTotal / (editTotal + 24))
@@ -354,19 +351,21 @@ enum TypingEngine {
                     carried.forEach { appendCharacter(String($0)) }
                     for move in 0..<carried.count { appendKey(.arrowLeft, delay: move == 0 ? profile.repairDelay * (1.1 + unit()) : 30 + unit() * 24) }
                     eraseWrong()
-                    token.forEach { appendCharacter(String($0), speedMultiplier: 0.82) }
+                    word.forEach { appendCharacter(String($0), speedMultiplier: 0.82) }
                     for _ in 0..<carried.count { appendKey(.arrowRight, delay: 28 + unit() * 20) }
                     tokenIndex += 3
                 } else {
                     eraseWrong()
-                    token.forEach { appendCharacter(String($0), speedMultiplier: 0.82) }
+                    word.forEach { appendCharacter(String($0), speedMultiplier: 0.82) }
+                    trail.forEach { appendCharacter(String($0)) }
                     tokenIndex += 1
                 }
                 repairs += 1
                 continue
             }
 
-            let characters = Array(token)
+            func matchingCase(_ key: String, _ intended: Character) -> String { intended.isUppercase ? key.uppercased() : key }
+            let characters = Array(word)
             let mistakeIndex = min(characters.count - 2, max(1, Int(unit() * Double(max(1, characters.count - 2))) + 1))
             let choice = unit()
             if choice < 0.12 && settings.delayedRepairs {
@@ -376,12 +375,16 @@ enum TypingEngine {
                 for move in 0..<carried { appendKey(.arrowLeft, delay: move == 0 ? profile.repairDelay : 45 + unit() * 25) }
                 appendCharacter(String(characters[mistakeIndex]), speedMultiplier: 0.85)
                 for _ in 0..<carried { appendKey(.arrowRight, delay: 40 + unit() * 20) }
-            } else if choice < 0.24 {
-                // Extra-character insertion is distinct from substituting a key.
+            } else if choice < 0.24 || choice > 0.82 {
+                // Extra-character insertion is distinct from substituting a key:
+                // a double strike of the same key, or brushing a key beside the next one.
+                let next = characters[mistakeIndex + 1]
+                let brushed = next.lowercased().first.flatMap { neighbors[$0]?.randomElement(using: &random) }
+                let extra = choice > 0.82 ? String(characters[mistakeIndex]) : brushed.map { matchingCase(String($0), next) } ?? String(characters[mistakeIndex])
                 for index in characters.indices {
                     appendCharacter(String(characters[index]))
                     if index == mistakeIndex {
-                        appendCharacter("e")
+                        appendCharacter(extra)
                         appendKey(.backspace, delay: profile.repairDelay * (0.5 + unit()))
                     }
                 }
@@ -405,28 +408,26 @@ enum TypingEngine {
                         let learned = (profile.confusions[intended.lowercased()] ?? []).filter { $0.count == 1 && $0.first?.isLetter == true }
                         let neighborChoices = intended.lowercased().first.flatMap { neighbors[$0] } ?? []
                         let wrong: String
-                        if learned.count >= 3 && unit() < min(0.8, Double(learned.count) / Double(learned.count + 12)) { wrong = learned[min(learned.count - 1, Int(unit() * Double(learned.count)))] }
-                        else if let adjacent = neighborChoices.randomElement(using: &random) { wrong = String(adjacent) }
+                        if learned.count >= 3 && unit() < min(0.8, Double(learned.count) / Double(learned.count + 12)) { wrong = matchingCase(learned[min(learned.count - 1, Int(unit() * Double(learned.count)))], characters[index]) }
+                        else if let adjacent = neighborChoices.randomElement(using: &random) { wrong = matchingCase(String(adjacent), characters[index]) }
                         else { wrong = intended }
                         appendCharacter(wrong)
-                        if choice > 0.82 { appendCharacter(wrong) }
                         let observedDetection = evidence?.detectionDistances.randomElement(using: &random) ?? (profile.detectionCharacters * -log(max(0.000_001, 1 - unit())))
                         let detectionExtra = Int(max(0, min(8, observedDetection.rounded())))
-                        if settings.delayedRepairs && detectionExtra > 0 && index + detectionExtra < characters.count && unit() < 0.34 {
-                            for lookahead in 1...detectionExtra { appendCharacter(String(characters[index + lookahead])) }
-                            for _ in 0..<detectionExtra { appendKey(.backspace, delay: profile.repairDelay * 0.45) }
+                        let lookahead = settings.delayedRepairs && detectionExtra > 0 && index + detectionExtra < characters.count && unit() < 0.34 ? detectionExtra : 0
+                        // Lookahead characters are erased here and re-emitted by the normal loop.
+                        for offset in stride(from: 1, through: lookahead, by: 1) { appendCharacter(String(characters[index + offset])) }
+                        // One detection delay, then a quick deletion run back through the error.
+                        for erased in 0...lookahead {
+                            appendKey(.backspace, delay: erased == 0 ? profile.repairDelay * (0.5 + unit()) : 36 + unit() * 34)
                         }
-                        appendKey(.backspace, delay: profile.repairDelay * (0.5 + unit()))
-                        if choice > 0.82 { appendKey(.backspace, delay: 42 + unit() * 30) }
                         appendCharacter(intended, speedMultiplier: 0.8)
-                        if settings.delayedRepairs && detectionExtra > 0 && index + detectionExtra < characters.count {
-                            // Lookahead characters were removed above and will be emitted by the normal loop.
-                        }
                     } else {
                         appendCharacter(String(characters[index]))
                     }
                 }
             }
+            trail.forEach { appendCharacter(String($0)) }
             repairs += 1
             tokenIndex += 1
         }
