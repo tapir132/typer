@@ -167,8 +167,10 @@ struct TypingOverlayContent: View {
                     .accessibilityIdentifier("overlay.skipWait")
             }
             .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.7), radius: 2) // Keeps labels legible over the see-through card.
             .padding(30).frame(maxWidth: 600)
-            .background(Color(red: 0.16, green: 0.015, blue: 0.025).opacity(0.98))
+            // Translucent so the text being typed underneath stays readable.
+            .background(Color(red: 0.16, green: 0.015, blue: 0.025).opacity(0.45))
             .clipShape(RoundedRectangle(cornerRadius: 16))
             .padding(16)
         }

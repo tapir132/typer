@@ -32,6 +32,12 @@ struct WorkspaceLayoutTests {
         let progress = PlaybackProgress(fraction: 0.35, remaining: 420, isPaused: true)
         try await snapshot(TypingOverlayContent(paused: true, progress: progress, target: "TextEdit", message: nil,
             canSaveLater: true), name: "ScreenOverlay-SaveLater", size: NSSize(width: 1240, height: 800))
+        // The card is see-through, so check it over a light document being typed into.
+        let document = Text(String(repeating: "The quick brown fox jumps over the lazy dog while Typer keeps typing. ", count: 60))
+            .font(.system(size: 17)).foregroundStyle(.black).padding(40)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).background(.white)
+        try await snapshot(ZStack { document; TypingOverlayContent(paused: false, progress: progress, target: "TextEdit", message: nil) },
+                           name: "ScreenOverlay-OverText", size: NSSize(width: 1240, height: 800))
     }
 
     @Test func switchingSectionsKeepsHeaderAtTheSameWindowPosition() async throws {
