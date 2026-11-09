@@ -1,8 +1,9 @@
 name: Publish Edge Build
 
+# Archived publisher. Disabled in GitHub and deliberately has no push trigger.
+# Restore only after an explicit human request to resume Edge publishing.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write

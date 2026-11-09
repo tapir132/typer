@@ -20,7 +20,7 @@ cp "$PROJECT_ROOT/.build/release/Typer" "$CONTENTS/MacOS/Typer"
 cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
 sed 's/__VERSION__/1.0.0/g' "$PROJECT_ROOT/Resources/Info.plist" > "$CONTENTS/Info.plist"
 
-# Match Edge's commit timestamp for clean local builds so later commits remain
+# Match published builds' commit timestamp so later commits remain
 # eligible updates. Protect uncommitted app changes with a current-time stamp.
 # Distribution jobs set their immutable version first and opt out of this block.
 if [[ "${TYPER_DISTRIBUTION_BUILD:-0}" != "1" ]]; then

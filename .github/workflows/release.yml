@@ -7,12 +7,12 @@ on:
         description: Semantic version (for example, 1.1.0)
         required: true
         type: string
-      edge_commit:
-        description: Commit SHA of the tested Edge build
+      source_commit:
+        description: Commit SHA to release to Stable
         required: true
         type: string
       smoke_tested:
-        description: Confirm this Edge build passed native UI and playback smoke checks
+        description: Confirm this commit passed native UI and playback smoke checks
         required: true
         type: boolean
         default: false
@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ inputs.edge_commit }}
+          ref: ${{ inputs.source_commit }}
           fetch-depth: 0
       - name: Test
         # Native UI tests share NSApplication; isolate their clocks and focus state.
@@ -47,8 +47,6 @@ jobs:
           [[ "$SMOKE_TESTED" == "true" ]]
           git fetch --no-tags origin main:refs/remotes/origin/main
           git merge-base --is-ancestor HEAD origin/main
-          short_sha="$(git rev-parse --short=7 HEAD)"
-          curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/edge/appcast.xml" | grep -Fq "edge.$short_sha"
       - name: Configure release version
         env:
           VERSION: ${{ inputs.version }}
