@@ -3,8 +3,14 @@ import SwiftUI
 @main
 struct TyperApp: App {
     @NSApplicationDelegateAdaptor(TyperAppDelegate.self) private var appDelegate
-    @StateObject private var model = AppModel()
-    private let updateManager = UpdateManager.shared
+    @StateObject private var model: AppModel
+    private let updateManager: UpdateManager
+
+    init() {
+        ApplicationStartup.ensureSingleInstance()
+        _model = StateObject(wrappedValue: AppModel())
+        updateManager = UpdateManager.shared
+    }
 
     var body: some Scene {
         WindowGroup {

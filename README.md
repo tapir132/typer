@@ -18,6 +18,8 @@ open .build/Typer.app
 
 The build script uses the local `Cadence Signing` identity when available so Accessibility permission survives rebuilds; contributors without it receive an ad-hoc-signed build. On first use, open Typer's settings and enable Accessibility permission in **System Settings → Privacy & Security → Accessibility**.
 
+Typer runs one copy per Mac login. Opening another Stable, Edge, or development copy brings the running app forward before loading shared profiles, settings, shortcuts, or saved runs. Quit the running copy before switching builds. A process lock also protects simultaneous launches and is released automatically if the app crashes.
+
 ## Keyboard shortcuts
 
 Open **Settings → Shortcuts** to change Arm typing, Pause / resume, Skip current wait, and Stop typing. Click the current binding, press a new combination, then release the keys to save. Bare Escape cancels. Function keys work on their own; other keys need Control, Option, or Command. Modifier-only chords trigger on release when no other key was used and require Accessibility permission.

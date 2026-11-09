@@ -391,7 +391,12 @@ enum TypingEngine {
                 continue
             }
 
-            func matchingCase(_ key: String, _ intended: Character) -> String { intended.isUppercase ? key.uppercased() : key }
+            func matchingCase(_ key: String, _ intended: Character) -> String {
+                let cased = intended.isUppercase ? key.uppercased() : key
+                // Some letters uppercase into several characters (ß → SS).
+                // A one-key mistake must remain repairable by one Backspace.
+                return cased.count == 1 ? cased : key
+            }
             let characters = Array(word)
             let mistakeIndex = min(characters.count - 2, max(1, Int(unit() * Double(max(1, characters.count - 2))) + 1))
             let choice = unit()

@@ -56,6 +56,23 @@ struct TypingEngineTests {
         #expect(missedSpaces > 0)
     }
 
+    @Test func learnedConfusionsThatExpandWhenUppercasedStillRepairExactly() {
+        let text = "CANADA ALABAMA PARAGRAPHS CATALOGUE"
+        var settings = TypingSettings(); settings.mistakeLevel = 5
+        var profile = TypingProfile.baseline()
+        profile.sampleCount = 1
+        profile.backspaceRate = 0.2
+        profile.confusions = Dictionary(uniqueKeysWithValues: "abcdefghijklmnopqrstuvwxyz".map { (String($0), Array(repeating: "ß", count: 24)) })
+        var repairs = 0
+        for seed in 1...100 {
+            var random = TestGenerator(seed: UInt64(seed))
+            let plan = TypingEngine.generatePlan(text: text, settings: settings, profile: profile, using: &random)
+            #expect(apply(plan.events) == text, "Failed seed \(seed)")
+            repairs += plan.repairs
+        }
+        #expect(repairs > 0)
+    }
+
     @Test func postRepairSlowingIsLearnedAndReplayed() {
         let records = [("a", 0.0), ("b", 100), ("c", 200), ("d", 300), ("x", 400)].map {
             TrainingKeyRecord(id: UUID(), kind: .character, key: $0.0, expected: "", pressTime: $0.1, dwell: 70, cursor: 0)
